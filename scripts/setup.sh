@@ -22,6 +22,8 @@ set +a
 DOMAIN="${DOMAIN:-}"
 HOST_IFACE="${HOST_IFACE:-}"
 INSTALL_USER="${INSTALL_USER:-${SUDO_USER:-$USER}}"
+CONTAINER_COUNT="${CONTAINER_COUNT:-10}"
+CONTAINER_IP_OFFSET="${CONTAINER_IP_OFFSET:-10}"
 LXD_BRIDGE_IP="${LXD_BRIDGE_IP:-10.10.0.1}"
 LXD_BRIDGE_SUBNET="${LXD_BRIDGE_SUBNET:-10.10.0.0/24}"
 
@@ -35,15 +37,30 @@ if ! id "$INSTALL_USER" >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ ${#SECONDARY_IPS[@]} -ne 10 ]]; then
-  echo "오류: SECONDARY_IPS는 10개여야 합니다. 현재 ${#SECONDARY_IPS[@]}개입니다."
+if ! [[ "$CONTAINER_COUNT" =~ ^[0-9]+$ ]] || (( CONTAINER_COUNT < 1 || CONTAINER_COUNT > 100 )); then
+  echo "오류: CONTAINER_COUNT는 1~100 범위의 정수여야 합니다."
+  exit 1
+fi
+
+if ! [[ "$CONTAINER_IP_OFFSET" =~ ^[0-9]+$ ]] || (( CONTAINER_IP_OFFSET < 2 || CONTAINER_IP_OFFSET > 254 )); then
+  echo "오류: CONTAINER_IP_OFFSET는 2~254 범위의 정수여야 합니다."
+  exit 1
+fi
+
+if [[ ${#SECONDARY_IPS[@]} -ne $CONTAINER_COUNT ]]; then
+  echo "오류: SECONDARY_IPS 개수는 CONTAINER_COUNT와 같아야 합니다. 현재 ${#SECONDARY_IPS[@]}개 / 설정값 ${CONTAINER_COUNT}개입니다."
   exit 1
 fi
 
 CONTAINER_IPS=()
-for i in $(seq 0 9); do
-  CONTAINER_IPS+=("10.10.0.$((10 + i))")
+for i in $(seq 0 $((CONTAINER_COUNT - 1))); do
+  CONTAINER_IPS+=("10.10.0.$((CONTAINER_IP_OFFSET + i))")
 done
+
+if (( CONTAINER_IP_OFFSET + CONTAINER_COUNT - 1 > 254 )); then
+  echo "오류: CONTAINER_IP_OFFSET + CONTAINER_COUNT - 1 이 254를 초과할 수 없습니다."
+  exit 1
+fi
 
 if [[ -f /etc/os-release ]]; then
   . /etc/os-release
@@ -323,6 +340,9 @@ configure_services() {
   sed \
     -e "s/__RUN_USER__/$INSTALL_USER/g" \
     -e "s/__RUN_GROUP__/$INSTALL_USER/g" \
+    -e "s/__CONTAINER_COUNT__/$CONTAINER_COUNT/g" \
+    -e "s/__CONTAINER_IP_OFFSET__/$CONTAINER_IP_OFFSET/g" \
+    -e "s/__LXD_BRIDGE_IP__/$LXD_BRIDGE_IP/g" \
     "$SCRIPT_DIR/config/lxd-classroom.service.template" | sudo tee /etc/systemd/system/lxd-classroom.service >/dev/null
 
   sudo systemctl daemon-reload
@@ -332,7 +352,7 @@ configure_services() {
 
 create_containers() {
   echo "=== 9. 컨테이너 생성 (약 5~10분) ==="
-  bash "$SCRIPT_DIR/scripts/create-containers.sh"
+  ENV_FILE="$ENV_FILE" bash "$SCRIPT_DIR/scripts/create-containers.sh"
 }
 
 install_lxd
@@ -350,6 +370,7 @@ create_containers
 echo ""
 echo "✓ 설치 완료!"
 echo "  패키지 관리자: $PKG_MGR"
+echo "  컨테이너 수: $CONTAINER_COUNT"
 echo "  웹 UI: https://${DOMAIN}"
 echo "  관리자 초기 비밀번호: admin"
 echo ""

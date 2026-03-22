@@ -13,7 +13,7 @@ LXD 컨테이너 기반 Linux 실습 환경. 학생마다 독립된 Ubuntu 24.04
 도메인:443   ──▶  Caddy  ──▶  127.0.0.1:3000 (Node.js 웹앱)
 ```
 
-- **컨테이너**: server0~server9, Ubuntu 24.04, 각자 전용 공인 IP
+- **컨테이너**: `server0`부터 `server{n-1}`까지, 1~100개 설정 가능
 - **웹 UI**: 브라우저 터미널(xterm.js), 관리자 대시보드
 - **인증**: 컨테이너 리눅스 계정 비밀번호 (`/etc/shadow`) 직접 사용
 - **초기 비밀번호**: `server{n}` (학생이 `passwd`로 변경 가능)
@@ -37,7 +37,7 @@ skkuding-linux/
 │   └── abuse-block.nft                 # 공통 포트 차단 규칙 (25, 6881-6889)
 └── scripts/
     ├── setup.sh               # 전체 설치 스크립트
-    └── create-containers.sh   # 컨테이너 10개 생성 스크립트
+    └── create-containers.sh   # .env 기준 컨테이너 생성 스크립트
 ```
 
 ## 설치
@@ -46,7 +46,7 @@ skkuding-linux/
 
 - Oracle Cloud (또는 기타) VM
 - RAM 16GB 이상 (컨테이너당 최대 8GB 제한)
-- Secondary Private IP 10개 + 각각 공인 IP 할당 (클라우드 콘솔에서)
+- `CONTAINER_COUNT` 개수만큼 Secondary Private IP + 각각 공인 IP 할당
 - 도메인 및 DNS 설정 완료
 - `apt-get` 또는 `dnf` 사용 가능
 - NetworkManager(`nmcli`) 사용 환경
@@ -66,9 +66,11 @@ nano .env
 DOMAIN="linux.example.com"      # 웹 UI 도메인
 HOST_IFACE="enp0s6"             # 호스트 외부 NIC 이름 (ip a로 확인)
 INSTALL_USER="ubuntu"           # 웹앱을 실행할 서버 사용자
+CONTAINER_COUNT="10"            # 1~100
+CONTAINER_IP_OFFSET="10"        # 내부 IP 시작 옥텟
 
 SECONDARY_IPS=(
-  "10.0.10.100"   # 클라우드에서 할당한 Secondary IP 10개
+  "10.0.10.100"   # 클라우드에서 할당한 Secondary IP
   "10.0.10.101"
   ...
 )
@@ -174,7 +176,7 @@ bash scripts/create-containers.sh
 
 | 파일 | 수정 항목 |
 |------|----------|
-| `.env` | `DOMAIN`, `HOST_IFACE`, `INSTALL_USER`, `SECONDARY_IPS` |
+| `.env` | `DOMAIN`, `HOST_IFACE`, `INSTALL_USER`, `CONTAINER_COUNT`, `CONTAINER_IP_OFFSET`, `SECONDARY_IPS` |
 | `app/data.json` (설치 후) | `externalIps` (공인 IP) |
 
 > **참고**: 컨테이너 내부 네트워크(10.10.0.0/24)와 LXD 브리지는 외부 NIC 대역과 무관하므로 변경 불필요.

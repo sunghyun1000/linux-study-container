@@ -14,6 +14,45 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 const DATA_FILE = path.join(__dirname, 'data.json');
+const CONTAINER_COUNT = Number.parseInt(process.env.CONTAINER_COUNT || '10', 10);
+const CONTAINER_IP_OFFSET = Number.parseInt(process.env.CONTAINER_IP_OFFSET || '10', 10);
+const LXD_BRIDGE_IP = process.env.LXD_BRIDGE_IP || '10.10.0.1';
+
+if (!Number.isInteger(CONTAINER_COUNT) || CONTAINER_COUNT < 1 || CONTAINER_COUNT > 100) {
+  throw new Error('CONTAINER_COUNT must be an integer between 1 and 100');
+}
+
+if (!Number.isInteger(CONTAINER_IP_OFFSET) || CONTAINER_IP_OFFSET < 2 || CONTAINER_IP_OFFSET > 254) {
+  throw new Error('CONTAINER_IP_OFFSET must be an integer between 2 and 254');
+}
+
+if (CONTAINER_IP_OFFSET + CONTAINER_COUNT - 1 > 254) {
+  throw new Error('CONTAINER_IP_OFFSET + CONTAINER_COUNT - 1 must be <= 254');
+}
+
+function containerIds() {
+  return Array.from({ length: CONTAINER_COUNT }, (_, i) => String(i));
+}
+
+function isValidContainerId(value) {
+  if (!/^\d+$/.test(String(value))) return false;
+  const numericId = Number.parseInt(String(value), 10);
+  return numericId >= 0 && numericId < CONTAINER_COUNT;
+}
+
+function requireValidContainerId(value, errorMessage) {
+  const cid = String(value);
+  if (!isValidContainerId(cid)) {
+    const error = new Error(errorMessage);
+    error.status = 400;
+    throw error;
+  }
+  return cid;
+}
+
+function containerIp(containerId) {
+  return `10.10.0.${CONTAINER_IP_OFFSET + Number.parseInt(containerId, 10)}`;
+}
 
 function loadData() {
   if (!fs.existsSync(DATA_FILE)) {
@@ -60,8 +99,12 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ── 학생 인증 ──────────────────────────────────────────────
 app.post('/api/auth', (req, res) => {
   const { id, password } = req.body;
-  const cid = String(id);
-  if (cid < '0' || cid > '9') return res.status(400).json({ error: '잘못된 컨테이너 번호' });
+  let cid;
+  try {
+    cid = requireValidContainerId(id, '잘못된 컨테이너 번호');
+  } catch (error) {
+    return res.status(error.status || 400).json({ error: error.message });
+  }
   if (!password) return res.status(400).json({ error: '비밀번호를 입력하세요' });
   if (!verifyContainerPassword(cid, password)) return res.status(401).json({ error: '비밀번호가 틀렸습니다' });
   const token = uuidv4();
@@ -89,11 +132,11 @@ function requireAdmin(req, res, next) {
 // ── 공개 API (학생용) ──────────────────────────────────────
 app.get('/api/containers', (req, res) => {
   const data = loadData();
-  const result = [];
-  for (let i = 0; i <= 9; i++) {
-    const cid = String(i);
-    result.push({ id: cid, nickname: data.nicknames[cid] || '', externalIp: data.externalIps[cid] || '' });
-  }
+  const result = containerIds().map(cid => ({
+    id: cid,
+    nickname: data.nicknames[cid] || '',
+    externalIp: data.externalIps[cid] || ''
+  }));
   res.json(result);
 });
 
@@ -103,25 +146,30 @@ app.get('/api/admin/containers', requireAdmin, (req, res) => {
   // lxc list를 한 번만 호출해서 전체 상태 파싱
   let stateMap = {};
   try {
-    const out = execSync('lxc list "^server[0-9]$" --format=csv -c n,s', { encoding: 'utf8' });
+    const out = execSync('lxc list "^server[0-9]+$" --format=csv -c n,s', { encoding: 'utf8' });
     out.trim().split('\n').filter(Boolean).forEach(line => {
       const [name, state] = line.split(',');
       const id = name.replace('server', '');
-      stateMap[id] = state.toLowerCase();
+      if (isValidContainerId(id)) stateMap[id] = state.toLowerCase();
     });
   } catch (_) {}
-  const result = [];
-  for (let i = 0; i <= 9; i++) {
-    const cid = String(i);
-    result.push({ id: cid, nickname: data.nicknames[cid] || '', externalIp: data.externalIps[cid] || '', state: stateMap[cid] || 'stopped' });
-  }
+  const result = containerIds().map(cid => ({
+    id: cid,
+    nickname: data.nicknames[cid] || '',
+    externalIp: data.externalIps[cid] || '',
+    state: stateMap[cid] || 'stopped'
+  }));
   res.json(result);
 });
 
 app.put('/api/admin/nickname/:id', requireAdmin, (req, res) => {
   const data = loadData();
-  const cid = req.params.id;
-  if (cid < '0' || cid > '9') return res.status(400).json({ error: '잘못된 ID' });
+  let cid;
+  try {
+    cid = requireValidContainerId(req.params.id, '잘못된 ID');
+  } catch (error) {
+    return res.status(error.status || 400).json({ error: error.message });
+  }
   data.nicknames[cid] = req.body.nickname || '';
   saveData(data);
   res.json({ ok: true });
@@ -129,8 +177,12 @@ app.put('/api/admin/nickname/:id', requireAdmin, (req, res) => {
 
 app.put('/api/admin/externalip/:id', requireAdmin, (req, res) => {
   const data = loadData();
-  const cid = req.params.id;
-  if (cid < '0' || cid > '9') return res.status(400).json({ error: '잘못된 ID' });
+  let cid;
+  try {
+    cid = requireValidContainerId(req.params.id, '잘못된 ID');
+  } catch (error) {
+    return res.status(error.status || 400).json({ error: error.message });
+  }
   data.externalIps[cid] = req.body.externalIp || '';
   saveData(data);
   res.json({ ok: true });
@@ -157,9 +209,15 @@ app.get('/api/admin/reset-status', requireAdmin, (req, res) => {
 app.post('/api/admin/reset', requireAdmin, (req, res) => {
   const { ids, clearNickname } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids 필요' });
+  let normalizedIds;
+  try {
+    normalizedIds = [...new Set(ids.map(id => requireValidContainerId(id, '잘못된 ID')))];
+  } catch (error) {
+    return res.status(error.status || 400).json({ error: error.message });
+  }
 
-  ids.forEach(id => resetStatus.set(String(id), 'resetting'));
-  res.json({ ok: true, message: `${ids.length}개 컨테이너 초기화 시작` });
+  normalizedIds.forEach(id => resetStatus.set(id, 'resetting'));
+  res.json({ ok: true, message: `${normalizedIds.length}개 컨테이너 초기화 시작` });
 
   // 컨테이너가 exec 가능할 때까지 폴링 (최대 60초)
   async function waitReady(cid) {
@@ -176,7 +234,7 @@ app.post('/api/admin/reset', requireAdmin, (req, res) => {
 
   // 컨테이너별 초기화 함수
   async function resetOne(id) {
-    const cid = String(id);
+    const cid = requireValidContainerId(id, '잘못된 ID');
     const initialPassword = 'server' + cid;
     try {
       const x = '< /dev/null';
@@ -195,10 +253,10 @@ app.post('/api/admin/reset', requireAdmin, (req, res) => {
       await execAsync(`lxc exec server${cid} -- bash -c "echo 'server:${initialPassword}' | chpasswd" ${x}`);
       await execAsync(`lxc exec server${cid} -- bash -c "echo server${cid} > /etc/hostname && hostname server${cid}" ${x}`);
       await execAsync(`lxc exec server${cid} -- bash -c "touch /etc/cloud/cloud-init.disabled && systemctl disable cloud-init cloud-init-local cloud-config cloud-final 2>/dev/null || true" ${x}`);
-      const ip = `10.10.0.${10 + parseInt(cid)}`;
-      const netplanCfg = `network:\\n  version: 2\\n  ethernets:\\n    eth0:\\n      dhcp4: false\\n      addresses:\\n        - ${ip}/24\\n      routes:\\n        - to: default\\n          via: 10.10.0.1\\n      nameservers:\\n        addresses: [10.10.0.1, 8.8.8.8]\\n`;
+      const ip = containerIp(cid);
+      const netplanCfg = `network:\\n  version: 2\\n  ethernets:\\n    eth0:\\n      dhcp4: false\\n      addresses:\\n        - ${ip}/24\\n      routes:\\n        - to: default\\n          via: ${LXD_BRIDGE_IP}\\n      nameservers:\\n        addresses: [${LXD_BRIDGE_IP}, 8.8.8.8]\\n`;
       await execAsync(`lxc exec server${cid} -- bash -c "printf '${netplanCfg}' > /etc/netplan/50-cloud-init.yaml" ${x}`);
-      await execAsync(`lxc exec server${cid} -- bash -c "ip addr flush dev eth0 2>/dev/null; ip addr add ${ip}/24 dev eth0; ip route add default via 10.10.0.1 2>/dev/null || true" ${x}`);
+      await execAsync(`lxc exec server${cid} -- bash -c "ip addr flush dev eth0 2>/dev/null; ip addr add ${ip}/24 dev eth0; ip route add default via ${LXD_BRIDGE_IP} 2>/dev/null || true" ${x}`);
       await execAsync(`lxc config device add server${cid} eth0 nic nictype=bridged parent=lxdbr0 name=eth0 ipv4.address=${ip} 2>/dev/null || lxc config device set server${cid} eth0 ipv4.address=${ip} ${x}`);
       await execAsync(`lxc exec server${cid} -- bash -c "grep -v 'nrconf{restart}' /etc/needrestart/needrestart.conf > /tmp/nr.conf 2>/dev/null && echo '\\\$nrconf{restart} = q(a);' >> /tmp/nr.conf && mv /tmp/nr.conf /etc/needrestart/needrestart.conf || true" ${x}`);
       if (clearNickname) {
@@ -215,7 +273,7 @@ app.post('/api/admin/reset', requireAdmin, (req, res) => {
   }
 
   // 모든 컨테이너 병렬 초기화
-  Promise.all(ids.map(resetOne));
+  Promise.all(normalizedIds.map(resetOne));
 });
 
 // ── WebSocket 터미널 ───────────────────────────────────────
@@ -230,6 +288,7 @@ wss.on('connection', (ws, req) => {
   if (type === 'admin') {
     // 교사가 특정 컨테이너 미리보기
     if (!adminSessions.has(token)) return ws.close(1008, 'Unauthorized');
+    if (!isValidContainerId(id)) return ws.close(1008, 'Unauthorized');
     containerId = String(id);
   } else {
     // 학생

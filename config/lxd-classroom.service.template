@@ -12,6 +12,9 @@ ExecStart=/usr/bin/node server.js
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
+Environment=CONTAINER_COUNT=__CONTAINER_COUNT__
+Environment=CONTAINER_IP_OFFSET=__CONTAINER_IP_OFFSET__
+Environment=LXD_BRIDGE_IP=__LXD_BRIDGE_IP__
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=lxd-classroom

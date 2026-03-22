@@ -1,16 +1,5 @@
 {
   "teacherPassword": "admin",
   "nicknames": {},
-  "externalIps": {
-    "0": "공인IP_0",
-    "1": "공인IP_1",
-    "2": "공인IP_2",
-    "3": "공인IP_3",
-    "4": "공인IP_4",
-    "5": "공인IP_5",
-    "6": "공인IP_6",
-    "7": "공인IP_7",
-    "8": "공인IP_8",
-    "9": "공인IP_9"
-  }
+  "externalIps": {}
 }
