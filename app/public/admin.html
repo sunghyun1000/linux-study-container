@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>관리자 대시보드 - Linux 실습실</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+  .topbar { background: #1e293b; padding: 0.75rem 1.5rem; display: flex; align-items: center; gap: 1rem; border-bottom: 1px solid #334155; }
+  .topbar h1 { font-size: 1.1rem; color: #38bdf8; }
+  .topbar .right { margin-left: auto; display: flex; gap: 0.75rem; }
+  .btn { border-radius: 6px; padding: 0.4rem 1rem; font-size: 0.85rem; cursor: pointer; border: none; font-weight: 500; }
+  .btn-ghost { background: none; border: 1px solid #334155; color: #94a3b8; }
+  .btn-ghost:hover { border-color: #94a3b8; color: #e2e8f0; }
+  .btn-primary { background: #0ea5e9; color: white; }
+  .btn-primary:hover { background: #0284c7; }
+  .btn-danger { background: #ef4444; color: white; }
+  .btn-danger:hover { background: #dc2626; }
+
+  /* 로그인 */
+  #login-page { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .login-card { background: #1e293b; border-radius: 12px; padding: 2rem; width: 360px; }
+  .login-card h2 { margin-bottom: 1.5rem; color: #38bdf8; }
+  .back-to-student { display: block; text-align: center; margin-top: 1.25rem; color: #475569; font-size: 0.85rem; text-decoration: none; }
+  .back-to-student:hover { color: #94a3b8; }
+  input { width: 100%; background: #0f172a; border: 2px solid #334155; border-radius: 8px; padding: 0.7rem 1rem; color: #e2e8f0; font-size: 1rem; outline: none; margin-bottom: 1rem; }
+  input:focus { border-color: #38bdf8; }
+  .error { color: #f87171; font-size: 0.85rem; margin-top: 0.5rem; }
+
+  /* 대시보드 */
+  #dashboard-page { display: none; }
+  .action-bar { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .table-wrap { background: #1e293b; border-radius: 10px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #0f172a; padding: 0.75rem 1rem; text-align: left; font-size: 0.8rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+  td { padding: 0.75rem 1rem; border-top: 1px solid #0f172a; font-size: 0.9rem; vertical-align: middle; }
+  tr:hover td { background: #263347; }
+  .badge { display: inline-block; border-radius: 4px; padding: 0.15rem 0.5rem; font-size: 0.75rem; font-weight: 600; }
+  .badge-running { background: #064e3b; color: #34d399; }
+  .badge-stopped { background: #3b1f1f; color: #f87171; }
+  .badge-resetting { background: #1e3a5f; color: #60a5fa; }
+  .badge-done { background: #064e3b; color: #34d399; }
+  .badge-error { background: #3b1f1f; color: #f87171; }
+  .chk { width: 18px; height: 18px; cursor: pointer; accent-color: #0ea5e9; }
+  .init-pw { font-family: monospace; background: #0f172a; padding: 0.3rem 0.6rem; border-radius: 4px; font-size: 0.8rem; color: #64748b; }
+  .nickname-field { display: flex; gap: 0.5rem; align-items: center; }
+  .nickname-field input { margin: 0; padding: 0.4rem 0.6rem; font-size: 0.85rem; width: 150px; border-color: #334155; }
+  .nickname-field input:focus { border-color: #38bdf8; }
+  .nick-saved { font-size: 0.75rem; color: #34d399; display: none; }
+
+  /* 툴팁 */
+  .tooltip-wrap { position: relative; display: inline-flex; align-items: center; gap: 0.4rem; }
+  .tooltip-icon { width: 16px; height: 16px; border-radius: 50%; background: #334155; color: #94a3b8; font-size: 0.7rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; cursor: default; flex-shrink: 0; }
+  .tooltip-box { display: none; position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 0.6rem 0.8rem; font-size: 0.78rem; color: #cbd5e1; white-space: nowrap; z-index: 10; line-height: 1.5; }
+  .tooltip-wrap:hover .tooltip-box { display: block; }
+
+  /* 모달 */
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); align-items: center; justify-content: center; z-index: 100; }
+  .modal-bg.open { display: flex; }
+  .modal { background: #1e293b; border-radius: 12px; padding: 2rem; width: 400px; }
+  .modal h3 { margin-bottom: 1.25rem; }
+  .modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem; }
+  .reset-targets { font-family: monospace; font-size: 0.85rem; color: #fbbf24; background: #0f172a; border-radius: 6px; padding: 0.6rem 0.8rem; margin-bottom: 1.25rem; line-height: 1.8; }
+  .checkbox-row { display: flex; align-items: center; gap: 0.6rem; font-size: 0.9rem; color: #cbd5e1; cursor: pointer; user-select: none; }
+  .checkbox-row input[type=checkbox] { width: auto; margin: 0; }
+
+  /* 토스트 */
+  #toast { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 200; display: flex; flex-direction: column; gap: 0.5rem; }
+  .toast-item { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 0.7rem 1.1rem; font-size: 0.88rem; display: flex; align-items: center; gap: 0.6rem; min-width: 240px; animation: slide-in 0.2s ease; }
+  .toast-item.success { border-color: #059669; }
+  .toast-item.error   { border-color: #dc2626; }
+  .toast-item.info    { border-color: #0ea5e9; }
+  @keyframes slide-in { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+</style>
+</head>
+<body>
+
+<!-- 로그인 -->
+<div id="login-page">
+  <div class="login-card">
+    <h2>🔐 관리자 로그인</h2>
+    <input type="password" id="admin-pw" placeholder="비밀번호" />
+    <button class="btn btn-primary" style="width:100%;padding:0.7rem" onclick="adminLogin()">로그인</button>
+    <div class="error" id="login-error"></div>
+    <a href="/" class="back-to-student">← 학생 접속 페이지로 돌아가기</a>
+  </div>
+</div>
+
+<!-- 대시보드 -->
+<div id="dashboard-page">
+  <div class="topbar">
+    <h1>🐧 Linux 실습실 — 관리자 대시보드</h1>
+    <div class="right">
+      <button class="btn btn-ghost" onclick="openPwModal()">비밀번호 변경</button>
+      <button class="btn btn-ghost" onclick="adminLogout()">로그아웃</button>
+    </div>
+  </div>
+  <div style="padding:1.5rem">
+    <div class="action-bar">
+      <button class="btn btn-ghost" onclick="selectAll()">전체 선택</button>
+      <button class="btn btn-ghost" onclick="selectNone()">선택 해제</button>
+      <button class="btn btn-danger" onclick="openResetModal()">선택 컨테이너 초기화</button>
+      <button class="btn btn-ghost" onclick="loadContainers()" style="margin-left:auto">새로고침</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:40px"></th>
+            <th>컨테이너</th>
+            <th>상태</th>
+            <th>별명</th>
+            <th>외부 IP</th>
+            <th>
+              <div class="tooltip-wrap">
+                초기 비밀번호
+                <span class="tooltip-icon">?</span>
+                <div class="tooltip-box">
+                  초기 비밀번호는 <strong>server{번호}</strong>입니다.<br>
+                  학생이 <code>passwd</code> 명령어로 변경하면<br>
+                  변경된 비밀번호로 로그인해야 합니다.<br>
+                  초기화 시 다시 <strong>server{번호}</strong>로 돌아옵니다.
+                </div>
+              </div>
+            </th>
+          </tr>
+        </thead>
+        <tbody id="container-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 초기화 확인 모달 -->
+<div class="modal-bg" id="reset-modal">
+  <div class="modal">
+    <h3>컨테이너 초기화</h3>
+    <div class="reset-targets" id="reset-targets"></div>
+    <label class="checkbox-row" style="margin-bottom:0.75rem">
+      <input type="checkbox" id="clear-nickname-chk" />
+      별명도 함께 삭제
+    </label>
+    <p style="font-size:0.82rem;color:#64748b">완전히 새로운 Ubuntu 24.04로 재생성됩니다. 약 30~60초 소요됩니다.</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeResetModal()">취소</button>
+      <button class="btn btn-danger" onclick="confirmReset()">초기화</button>
+    </div>
+  </div>
+</div>
+
+<!-- 관리자 비밀번호 변경 모달 -->
+<div class="modal-bg" id="pw-modal">
+  <div class="modal">
+    <h3>비밀번호 변경</h3>
+    <input type="password" id="cur-pw" placeholder="현재 비밀번호" />
+    <input type="password" id="new-pw" placeholder="새 비밀번호" />
+    <input type="password" id="new-pw2" placeholder="새 비밀번호 확인" />
+    <div class="error" id="pw-modal-error"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closePwModal()">취소</button>
+      <button class="btn btn-primary" onclick="changeAdminPw()">변경</button>
+    </div>
+  </div>
+</div>
+
+<!-- 토스트 컨테이너 -->
+<div id="toast"></div>
+
+<script>
+let adminToken = null;
+let containers = [];
+let pendingResetIds = [];
+let resetPollingTimer = null;
+
+document.getElementById('admin-pw').addEventListener('keydown', e => { if (e.key === 'Enter') adminLogin(); });
+
+// ── 토스트 ──────────────────────────────────────────────────
+function toast(msg, type = 'success', duration = 3000) {
+  const icons = { success: '✓', error: '✕', info: 'ℹ' };
+  const el = document.createElement('div');
+  el.className = `toast-item ${type}`;
+  el.innerHTML = `<span>${icons[type]}</span> ${msg}`;
+  document.getElementById('toast').appendChild(el);
+  setTimeout(() => el.remove(), duration);
+}
+
+// ── 인증 ────────────────────────────────────────────────────
+async function adminLogin() {
+  const pw = document.getElementById('admin-pw').value;
+  const err = document.getElementById('login-error');
+  const res = await fetch('/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw }) });
+  const data = await res.json();
+  if (!res.ok) { err.textContent = data.error; return; }
+  adminToken = data.token;
+  document.getElementById('login-page').style.display = 'none';
+  document.getElementById('dashboard-page').style.display = 'block';
+  loadContainers();
+}
+
+function adminLogout() { adminToken = null; location.reload(); }
+
+// ── 컨테이너 목록 ────────────────────────────────────────────
+async function loadContainers() {
+  const res = await fetch('/api/admin/containers', { headers: { Authorization: 'Bearer ' + adminToken } });
+  containers = await res.json();
+
+  // 페이지 재진입 시 진행 중인 초기화 복원
+  const statusRes = await fetch('/api/admin/reset-status', { headers: { Authorization: 'Bearer ' + adminToken } });
+  const status = await statusRes.json();
+  const resumeIds = Object.entries(status).filter(([, v]) => v === 'resetting').map(([k]) => k);
+  if (resumeIds.length > 0) {
+    pendingResetIds = resumeIds;
+    toast(`초기화 진행 중: ${resumeIds.map(i => 'server' + i).join(', ')}`, 'info', 5000);
+    startResetPolling(resumeIds);
+  }
+
+  renderTable();
+}
+
+function renderTable() {
+  const tbody = document.getElementById('container-tbody');
+  tbody.innerHTML = '';
+  containers.forEach(c => {
+    const isResetting = pendingResetIds.includes(c.id);
+    const displayState = isResetting ? 'resetting' : c.state;
+    const stateBadge = displayState === 'running' ? '<span class="badge badge-running">● 실행중</span>'
+      : displayState === 'resetting' ? '<span class="badge badge-resetting">↺ 초기화중</span>'
+      : '<span class="badge badge-stopped">○ 중지됨</span>';
+    const tr = document.createElement('tr');
+    tr.id = `row-${c.id}`;
+    tr.innerHTML = `
+      <td><input class="chk" type="checkbox" value="${c.id}" ${isResetting ? 'disabled' : ''} /></td>
+      <td><strong>server${c.id}</strong></td>
+      <td id="state-${c.id}">${stateBadge}</td>
+      <td>
+        <div class="nickname-field">
+          <input id="nick-${c.id}" value="${c.nickname}" placeholder="별명 없음" ${isResetting ? 'disabled' : ''} />
+          <button class="btn btn-primary" style="font-size:0.75rem;padding:0.3rem 0.7rem" onclick="saveNickname('${c.id}')" ${isResetting ? 'disabled' : ''}>저장</button>
+          <span class="nick-saved" id="nick-saved-${c.id}">✓ 저장됨</span>
+        </div>
+      </td>
+      <td>
+        <div class="nickname-field">
+          <input id="eip-${c.id}" value="${c.externalIp}" placeholder="예: 1.2.3.4" ${isResetting ? 'disabled' : ''} />
+          <button class="btn btn-primary" style="font-size:0.75rem;padding:0.3rem 0.7rem" onclick="saveExternalIp('${c.id}')" ${isResetting ? 'disabled' : ''}>저장</button>
+          <span class="nick-saved" id="eip-saved-${c.id}">✓ 저장됨</span>
+        </div>
+      </td>
+      <td><span class="init-pw">server${c.id}</span></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ── 별명 저장 ────────────────────────────────────────────────
+async function saveNickname(id) {
+  const nickname = document.getElementById('nick-' + id).value.trim();
+  const res = await fetch('/api/admin/nickname/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + adminToken }, body: JSON.stringify({ nickname }) });
+  if (res.ok) {
+    const c = containers.find(x => x.id === id);
+    if (c) c.nickname = nickname;
+    const saved = document.getElementById('nick-saved-' + id);
+    saved.style.display = 'inline';
+    setTimeout(() => { saved.style.display = 'none'; }, 2000);
+    toast(`server${id} 별명 저장 완료`, 'success');
+  } else {
+    toast(`server${id} 별명 저장 실패`, 'error');
+  }
+}
+
+// ── 외부 IP 저장 ─────────────────────────────────────────────
+async function saveExternalIp(id) {
+  const externalIp = document.getElementById('eip-' + id).value.trim();
+  const res = await fetch('/api/admin/externalip/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + adminToken }, body: JSON.stringify({ externalIp }) });
+  if (res.ok) {
+    const c = containers.find(x => x.id === id);
+    if (c) c.externalIp = externalIp;
+    const saved = document.getElementById('eip-saved-' + id);
+    saved.style.display = 'inline';
+    setTimeout(() => { saved.style.display = 'none'; }, 2000);
+    toast(`server${id} 외부 IP 저장 완료`, 'success');
+  } else {
+    toast(`server${id} 외부 IP 저장 실패`, 'error');
+  }
+}
+
+// ── 선택 ────────────────────────────────────────────────────
+function selectAll() { document.querySelectorAll('.chk:not(:disabled)').forEach(c => c.checked = true); }
+function selectNone() { document.querySelectorAll('.chk').forEach(c => c.checked = false); }
+
+// ── 초기화 모달 ──────────────────────────────────────────────
+function openResetModal() {
+  const ids = [...document.querySelectorAll('.chk:checked')].map(c => c.value);
+  if (ids.length === 0) { toast('초기화할 컨테이너를 선택하세요', 'info'); return; }
+  pendingResetIds = [];
+  document.getElementById('reset-targets').textContent = ids.map(i => 'server' + i).join('  ');
+  document.getElementById('clear-nickname-chk').checked = false;
+  document.getElementById('reset-modal').classList.add('open');
+}
+
+function closeResetModal() { document.getElementById('reset-modal').classList.remove('open'); }
+
+async function confirmReset() {
+  const ids = [...document.querySelectorAll('.chk:checked')].map(c => c.value);
+  const clearNickname = document.getElementById('clear-nickname-chk').checked;
+  closeResetModal();
+
+  pendingResetIds = [...ids];
+  renderTable();
+  toast(`${ids.length}개 컨테이너 초기화 시작`, 'info', 4000);
+
+  await fetch('/api/admin/reset', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + adminToken }, body: JSON.stringify({ ids, clearNickname }) });
+  startResetPolling(ids);
+}
+
+// ── 초기화 폴링 ──────────────────────────────────────────────
+function startResetPolling(ids) {
+  if (resetPollingTimer) clearInterval(resetPollingTimer);
+  resetPollingTimer = setInterval(async () => {
+    const r = await fetch('/api/admin/reset-status', { headers: { Authorization: 'Bearer ' + adminToken } });
+    const status = await r.json();
+    for (const id of [...pendingResetIds]) {
+      const s = status[id];
+      if (s === 'done') {
+        toast(`server${id} 초기화 완료`, 'success');
+        pendingResetIds = pendingResetIds.filter(x => x !== id);
+        const stateCell = document.getElementById('state-' + id);
+        if (stateCell) stateCell.innerHTML = '<span class="badge badge-running">● 실행중</span>';
+      } else if (s === 'error') {
+        toast(`server${id} 초기화 실패`, 'error', 6000);
+        pendingResetIds = pendingResetIds.filter(x => x !== id);
+      }
+    }
+    if (pendingResetIds.length === 0) {
+      clearInterval(resetPollingTimer);
+      loadContainers();
+    }
+  }, 4000);
+}
+
+// ── 관리자 비밀번호 변경 ─────────────────────────────────────
+function openPwModal() {
+  document.getElementById('pw-modal').classList.add('open');
+  document.getElementById('pw-modal-error').textContent = '';
+  ['cur-pw','new-pw','new-pw2'].forEach(id => document.getElementById(id).value = '');
+}
+function closePwModal() { document.getElementById('pw-modal').classList.remove('open'); }
+
+async function changeAdminPw() {
+  const cur = document.getElementById('cur-pw').value;
+  const nw = document.getElementById('new-pw').value;
+  const nw2 = document.getElementById('new-pw2').value;
+  const err = document.getElementById('pw-modal-error');
+  if (nw !== nw2) { err.textContent = '새 비밀번호가 일치하지 않습니다'; return; }
+  if (!nw) { err.textContent = '새 비밀번호를 입력하세요'; return; }
+  const res = await fetch('/api/admin/teacher-password', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + adminToken }, body: JSON.stringify({ currentPassword: cur, newPassword: nw }) });
+  const data = await res.json();
+  if (!res.ok) { err.textContent = data.error; return; }
+  closePwModal();
+  toast('비밀번호가 변경되었습니다', 'success');
+}
+</script>
+</body>
+</html>

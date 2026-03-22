@@ -1,0 +1,20 @@
+[Unit]
+Description=LXD Classroom Web App
+After=network.target lxd.service
+Wants=lxd.service
+
+[Service]
+Type=simple
+User=__RUN_USER__
+Group=__RUN_GROUP__
+WorkingDirectory=/opt/lxd-classroom
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lxd-classroom
+
+[Install]
+WantedBy=multi-user.target
