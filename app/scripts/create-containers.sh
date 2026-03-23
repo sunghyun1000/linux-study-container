@@ -30,6 +30,11 @@ setup_container() {
   lxc delete "server$i" --force 2>/dev/null < /dev/null || true
   lxc storage volume delete default "container/server$i" 2>/dev/null < /dev/null || true
   sudo rm -rf "/var/snap/lxd/common/lxd/storage-pools/default/containers/server$i" 2>/dev/null || true
+  # LXD DB에 남은 고아 레코드 제거 (UNIQUE constraint 방지)
+  lxc admin sql global \
+    "DELETE FROM storage_volumes WHERE name='server$i' AND type=2 \
+     AND storage_pool_id=(SELECT id FROM storage_pools WHERE name='default')" \
+    2>/dev/null < /dev/null || true
 
   # 컨테이너 생성 및 기본 설정
   lxc launch ubuntu:24.04 "server$i" --quiet < /dev/null
