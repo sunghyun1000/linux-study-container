@@ -67,6 +67,25 @@ function formatBytes(bytes) {
   return `${value.toFixed(digits)} ${units[unitIndex]}`;
 }
 
+function getHostDiskSummary() {
+  try {
+    const out = execSync('df -B1 --output=size,avail,pcent / | tail -n 1', {
+      encoding: 'utf8',
+      timeout: 3000,
+    }).trim();
+    const [sizeRaw, availRaw, usedPercent = '-'] = out.split(/\s+/);
+    const totalBytes = Number.parseInt(sizeRaw, 10);
+    const availableBytes = Number.parseInt(availRaw, 10);
+    return {
+      total: formatBytes(totalBytes),
+      available: formatBytes(availableBytes),
+      usedPercent,
+    };
+  } catch (_) {
+    return { total: '-', available: '-', usedPercent: '-' };
+  }
+}
+
 function loadData() {
   if (!fs.existsSync(DATA_FILE)) {
     const init = { teacherPassword: 'admin', nicknames: {} };
@@ -201,6 +220,10 @@ app.get('/api/admin/containers', requireAdmin, (req, res) => {
     diskUsage: usageMap[cid] || '-'
   }));
   res.json(result);
+});
+
+app.get('/api/admin/disk-summary', requireAdmin, (req, res) => {
+  res.json(getHostDiskSummary());
 });
 
 app.put('/api/admin/nickname/:id', requireAdmin, (req, res) => {

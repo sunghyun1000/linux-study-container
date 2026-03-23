@@ -31,6 +31,10 @@
   /* 대시보드 */
   #dashboard-page { display: none; }
   .action-bar { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+  .summary-card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 0.9rem 1rem; }
+  .summary-label { color: #94a3b8; font-size: 0.78rem; margin-bottom: 0.35rem; }
+  .summary-value { color: #e2e8f0; font-size: 1.05rem; font-weight: 600; }
   .table-wrap { background: #1e293b; border-radius: 10px; overflow: hidden; }
   table { width: 100%; border-collapse: collapse; }
   th { background: #0f172a; padding: 0.75rem 1rem; text-align: left; font-size: 0.8rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -103,6 +107,20 @@
       <button class="btn btn-danger" onclick="openResetModal()">선택 컨테이너 초기화</button>
       <button class="btn btn-ghost" onclick="loadContainers()" style="margin-left:auto">새로고침</button>
     </div>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="summary-label">전체 디스크 공간</div>
+        <div class="summary-value" id="disk-total">-</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">여유 디스크 공간</div>
+        <div class="summary-value" id="disk-available">-</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">사용률</div>
+        <div class="summary-value" id="disk-used-percent">-</div>
+      </div>
+    </div>
     <div class="table-wrap">
       <table>
         <thead>
@@ -174,6 +192,12 @@ let containers = [];
 let pendingResetIds = [];
 let resetPollingTimer = null;
 
+function updateDiskSummary(summary = {}) {
+  document.getElementById('disk-total').textContent = summary.total || '-';
+  document.getElementById('disk-available').textContent = summary.available || '-';
+  document.getElementById('disk-used-percent').textContent = summary.usedPercent || '-';
+}
+
 document.getElementById('admin-pw').addEventListener('keydown', e => { if (e.key === 'Enter') adminLogin(); });
 
 // ── 토스트 ──────────────────────────────────────────────────
@@ -203,11 +227,16 @@ function adminLogout() { adminToken = null; location.reload(); }
 
 // ── 컨테이너 목록 ────────────────────────────────────────────
 async function loadContainers() {
-  const res = await fetch('/api/admin/containers', { headers: { Authorization: 'Bearer ' + adminToken } });
-  containers = await res.json();
+  const headers = { Authorization: 'Bearer ' + adminToken };
+  const [containersRes, diskSummaryRes] = await Promise.all([
+    fetch('/api/admin/containers', { headers }),
+    fetch('/api/admin/disk-summary', { headers }),
+  ]);
+  containers = await containersRes.json();
+  updateDiskSummary(await diskSummaryRes.json());
 
   // 페이지 재진입 시 진행 중인 초기화 복원
-  const statusRes = await fetch('/api/admin/reset-status', { headers: { Authorization: 'Bearer ' + adminToken } });
+  const statusRes = await fetch('/api/admin/reset-status', { headers });
   const status = await statusRes.json();
   const resumeIds = Object.entries(status).filter(([, v]) => v === 'resetting').map(([k]) => k);
   if (resumeIds.length > 0) {
