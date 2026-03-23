@@ -105,6 +105,9 @@ app.post('/api/auth', (req, res) => {
   } catch (error) {
     return res.status(error.status || 400).json({ error: error.message });
   }
+  if (resetStatus.get(cid) === 'resetting') {
+    return res.status(423).json({ error: '컨테이너 초기화 진행 중입니다. 잠시 후 다시 시도하세요.' });
+  }
   if (!password) return res.status(400).json({ error: '비밀번호를 입력하세요' });
   if (!verifyContainerPassword(cid, password)) return res.status(401).json({ error: '비밀번호가 틀렸습니다' });
   const token = uuidv4();
@@ -135,7 +138,8 @@ app.get('/api/containers', (req, res) => {
   const result = containerIds().map(cid => ({
     id: cid,
     nickname: data.nicknames[cid] || '',
-    externalIp: data.externalIps[cid] || ''
+    externalIp: data.externalIps[cid] || '',
+    isResetting: resetStatus.get(cid) === 'resetting'
   }));
   res.json(result);
 });

@@ -16,11 +16,14 @@
   .container-item { display: flex; align-items: center; gap: 1rem; background: #1e293b; border: 2px solid #1e293b; border-radius: 10px; padding: 0.85rem 1.1rem; cursor: pointer; transition: all 0.15s; }
   .container-item:hover { border-color: #38bdf8; background: #1e3a4f; }
   .container-item.selected { border-color: #0ea5e9; background: #0c2d45; }
+  .container-item.disabled { cursor: not-allowed; opacity: 0.6; border-color: #334155; background: #111827; }
+  .container-item.disabled:hover { border-color: #334155; background: #111827; }
   .c-num { font-size: 0.75rem; font-family: monospace; color: #475569; min-width: 60px; }
   .c-name { font-weight: 600; font-size: 1rem; color: #e2e8f0; }
   .c-nickname { font-size: 0.85rem; color: #38bdf8; margin-left: auto; white-space: nowrap; }
   .c-main { display: flex; flex-direction: column; gap: 0.2rem; flex: 1; min-width: 0; }
   .c-ssh { font-size: 0.75rem; font-family: monospace; color: #475569; }
+  .c-status { font-size: 0.78rem; color: #fbbf24; }
   .ssh-header { display: flex; align-items: center; justify-content: center; gap: 0.4rem; margin-bottom: 0.5rem; }
   .ssh-header span { font-size: 0.82rem; color: #94a3b8; }
   /* ? 아이콘 */
@@ -45,7 +48,9 @@
   input[type=password]:focus { border-color: #38bdf8; }
   .btn-primary { width: 100%; background: #0ea5e9; border: none; border-radius: 8px; padding: 0.85rem; color: white; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.2s; }
   .btn-primary:hover { background: #0284c7; }
+  .btn-primary:disabled { background: #334155; color: #94a3b8; cursor: not-allowed; }
   .error { color: #f87171; font-size: 0.875rem; margin-top: 0.5rem; text-align: center; }
+  .info { color: #fbbf24; font-size: 0.875rem; margin-top: 0.5rem; text-align: center; }
   .admin-link { text-align: center; margin-top: 1.5rem; }
   .admin-link a { color: #475569; font-size: 0.8rem; text-decoration: none; }
   .admin-link a:hover { color: #94a3b8; }
@@ -68,7 +73,8 @@
     <button class="back-btn" onclick="goBack()">← 다시 선택</button>
     <div class="selected-info" id="selected-info"></div>
     <input type="password" id="password" placeholder="비밀번호 입력" autofocus />
-    <button class="btn-primary" onclick="login()">접속</button>
+    <button class="btn-primary" id="login-btn" onclick="login()">접속</button>
+    <div class="info" id="info"></div>
     <div class="error" id="error"></div>
   </div>
 
@@ -104,6 +110,7 @@
 <script>
 let selected = null;
 let containers = [];
+let refreshTimer = null;
 
 async function loadContainers() {
   const res = await fetch('/api/containers');
@@ -112,18 +119,23 @@ async function loadContainers() {
   list.innerHTML = '';
   containers.forEach(c => {
     const item = document.createElement('div');
-    item.className = 'container-item';
+    item.className = `container-item${c.isResetting ? ' disabled' : ''}`;
     item.innerHTML = `
       <span class="c-num">server${c.id}</span>
       <div class="c-main">
         <span class="c-name">${c.nickname || 'server' + c.id}</span>
         ${c.externalIp ? `<span class="c-ssh">ssh server@${c.externalIp}</span>` : ''}
+        ${c.isResetting ? '<span class="c-status">초기화 중...</span>' : ''}
       </div>
       ${c.externalIp ? `<span class="c-nickname">${c.externalIp}</span>` : ''}
     `;
-    item.onclick = () => selectContainer(c, item);
+    item.onclick = () => {
+      if (c.isResetting) return;
+      selectContainer(c, item);
+    };
     list.appendChild(item);
   });
+  syncSelectedState();
 }
 
 function selectContainer(c, el) {
@@ -135,7 +147,9 @@ function selectContainer(c, el) {
     <span class="c-name">${c.nickname || 'server' + c.id}</span>
   `;
   document.getElementById('password').value = '';
+  document.getElementById('info').textContent = '';
   document.getElementById('error').textContent = '';
+  updateLoginAvailability();
   document.getElementById('password').focus();
 }
 
@@ -145,11 +159,40 @@ function goBack() {
   document.getElementById('step-password').style.display = 'none';
 }
 
+function syncSelectedState() {
+  if (!selected) return;
+  const latest = containers.find(c => c.id === selected.id);
+  if (!latest) return;
+  selected = latest;
+  updateLoginAvailability();
+}
+
+function updateLoginAvailability() {
+  const loginBtn = document.getElementById('login-btn');
+  const info = document.getElementById('info');
+  if (!selected) {
+    loginBtn.disabled = true;
+    info.textContent = '';
+    return;
+  }
+  if (selected.isResetting) {
+    loginBtn.disabled = true;
+    info.textContent = '초기화 중... 완료 후 접속할 수 있습니다.';
+  } else {
+    loginBtn.disabled = false;
+    info.textContent = '';
+  }
+}
+
 document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
 
 async function login() {
   const password = document.getElementById('password').value;
   const err = document.getElementById('error');
+  if (!selected || selected.isResetting) {
+    document.getElementById('info').textContent = '초기화 중... 완료 후 접속할 수 있습니다.';
+    return;
+  }
   if (!password) { err.textContent = '비밀번호를 입력하세요'; return; }
   err.textContent = '';
   try {
@@ -164,6 +207,7 @@ async function login() {
 }
 
 loadContainers();
+refreshTimer = setInterval(loadContainers, 5000);
 </script>
 </body>
 </html>
