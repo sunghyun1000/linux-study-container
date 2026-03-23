@@ -54,6 +54,19 @@ function containerIp(containerId) {
   return `10.10.0.${CONTAINER_IP_OFFSET + Number.parseInt(containerId, 10)}`;
 }
 
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return '-';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  const digits = value >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${value.toFixed(digits)} ${units[unitIndex]}`;
+}
+
 function loadData() {
   if (!fs.existsSync(DATA_FILE)) {
     const init = { teacherPassword: 'admin', nicknames: {} };
@@ -159,19 +172,33 @@ app.get('/api/admin/containers', requireAdmin, (req, res) => {
   const data = loadData();
   // lxc list를 한 번만 호출해서 전체 상태 파싱
   let stateMap = {};
+  let usageMap = {};
   try {
     const out = execSync('lxc list "^server[0-9]+$" --format=csv -c n,s', { encoding: 'utf8' });
     out.trim().split('\n').filter(Boolean).forEach(line => {
       const [name, state] = line.split(',');
       const id = name.replace('server', '');
-      if (isValidContainerId(id)) stateMap[id] = state.toLowerCase();
+      if (!isValidContainerId(id)) return;
+      const normalizedState = state.toLowerCase();
+      stateMap[id] = normalizedState;
+      usageMap[id] = '-';
+      if (normalizedState !== 'running') return;
+      try {
+        const usageOut = execSync(`lxc exec server${id} -- df -B1 --output=used / | tail -n 1`, {
+          encoding: 'utf8',
+          timeout: 5000,
+        }).trim();
+        const usageBytes = Number.parseInt(usageOut, 10);
+        usageMap[id] = formatBytes(usageBytes);
+      } catch (_) {}
     });
   } catch (_) {}
   const result = containerIds().map(cid => ({
     id: cid,
     nickname: data.nicknames[cid] || '',
     externalIp: data.externalIps[cid] || '',
-    state: stateMap[cid] || 'stopped'
+    state: stateMap[cid] || 'stopped',
+    diskUsage: usageMap[cid] || '-'
   }));
   res.json(result);
 });

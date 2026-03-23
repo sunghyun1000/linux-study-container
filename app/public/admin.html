@@ -110,6 +110,7 @@
             <th style="width:40px"></th>
             <th>컨테이너</th>
             <th>상태</th>
+            <th>사용 용량</th>
             <th>별명</th>
             <th>외부 IP</th>
             <th>
@@ -233,6 +234,7 @@ function renderTable() {
       <td><input class="chk" type="checkbox" value="${c.id}" ${isResetting ? 'disabled' : ''} /></td>
       <td><strong>server${c.id}</strong></td>
       <td id="state-${c.id}">${stateBadge}</td>
+      <td><span class="init-pw">${c.diskUsage || '-'}</span></td>
       <td>
         <div class="nickname-field">
           <input id="nick-${c.id}" value="${c.nickname}" placeholder="별명 없음" ${isResetting ? 'disabled' : ''} />
