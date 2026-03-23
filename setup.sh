@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env}"
 
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -245,10 +245,12 @@ configure_lxd() {
 
 install_app() {
   echo "=== 5. 앱 설치 ==="
-  sudo mkdir -p /opt/lxd-classroom/public
+  sudo mkdir -p /opt/lxd-classroom/public /opt/lxd-classroom/scripts
   sudo cp "$SCRIPT_DIR/app/server.js" /opt/lxd-classroom/
   sudo cp "$SCRIPT_DIR/app/package.json" /opt/lxd-classroom/
   sudo cp "$SCRIPT_DIR/app/public/"* /opt/lxd-classroom/public/
+  sudo cp "$SCRIPT_DIR/app/scripts/create-containers.sh" /opt/lxd-classroom/scripts/
+  sudo chmod +x /opt/lxd-classroom/scripts/create-containers.sh
   if [[ ! -f /opt/lxd-classroom/data.json ]]; then
     sudo cp "$SCRIPT_DIR/app/data.json.example" /opt/lxd-classroom/data.json
   fi
@@ -352,7 +354,10 @@ configure_services() {
 
 create_containers() {
   echo "=== 9. 컨테이너 생성 (약 5~10분) ==="
-  ENV_FILE="$ENV_FILE" bash "$SCRIPT_DIR/scripts/create-containers.sh"
+  CONTAINER_COUNT="$CONTAINER_COUNT" \
+  CONTAINER_IP_OFFSET="$CONTAINER_IP_OFFSET" \
+  LXD_BRIDGE_IP="$LXD_BRIDGE_IP" \
+  bash /opt/lxd-classroom/scripts/create-containers.sh
 }
 
 install_lxd

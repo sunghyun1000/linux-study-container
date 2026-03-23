@@ -23,21 +23,22 @@ LXD 컨테이너 기반 Linux 실습 환경. 학생마다 독립된 Ubuntu 24.04
 ```
 skkuding-linux/
 ├── README.md
+├── setup.sh               # 전체 설치 스크립트
+├── .env.example
 ├── app/
 │   ├── server.js          # Node.js 백엔드 (Express + WebSocket + node-pty)
 │   ├── package.json
 │   ├── data.json.example  # 관리자 비밀번호, 별명, 외부 IP 저장 형식
+│   ├── scripts/
+│   │   └── create-containers.sh  # 컨테이너 생성/재생성 스크립트
 │   └── public/
 │       ├── index.html     # 학생 접속 페이지 (서버 선택 → 비밀번호 입력)
 │       ├── terminal.html  # xterm.js 터미널
 │       └── admin.html     # 관리자 대시보드
-├── config/
-│   ├── lxd-classroom.service.template  # systemd 서비스 템플릿
-│   ├── Caddyfile.template              # Caddy 설정 템플릿
-│   └── abuse-block.nft                 # 공통 포트 차단 규칙 (25, 6881-6889)
-└── scripts/
-    ├── setup.sh               # 전체 설치 스크립트
-    └── create-containers.sh   # .env 기준 컨테이너 생성 스크립트
+└── config/
+    ├── lxd-classroom.service.template  # systemd 서비스 템플릿
+    ├── Caddyfile.template              # Caddy 설정 템플릿
+    └── abuse-block.nft                 # 공통 포트 차단 규칙 (25, 6881-6889)
 ```
 
 ## 설치
@@ -80,8 +81,8 @@ SECONDARY_IPS=(
 **2. 설치 실행**
 
 ```bash
-chmod +x scripts/setup.sh scripts/create-containers.sh
-bash scripts/setup.sh
+chmod +x setup.sh app/scripts/create-containers.sh
+bash setup.sh
 ```
 
 **3. 외부 IP 업데이트**
@@ -106,6 +107,7 @@ sudo dnf install -y lxd lxd-client
 sudo lxd init --minimal
 lxc network set lxdbr0 ipv4.address 10.10.0.1/24
 lxc network set lxdbr0 ipv4.nat true
+lxc network set lxdbr0 ipv4.dhcp true
 ```
 
 #### 2. Node.js 22
@@ -119,10 +121,22 @@ sudo apt-get update && sudo apt-get install -y nodejs
 #### 3. 앱
 
 ```bash
-sudo cp -r app/ /opt/lxd-classroom
+sudo mkdir -p /opt/lxd-classroom/public /opt/lxd-classroom/scripts
+sudo cp app/server.js /opt/lxd-classroom/
+sudo cp app/package.json /opt/lxd-classroom/
+sudo cp app/public/* /opt/lxd-classroom/public/
+sudo cp app/scripts/create-containers.sh /opt/lxd-classroom/scripts/
+sudo chmod +x /opt/lxd-classroom/scripts/create-containers.sh
 sudo cp app/data.json.example /opt/lxd-classroom/data.json
 cd /opt/lxd-classroom && sudo npm install
-sed "s/__RUN_USER__/ubuntu/g; s/__RUN_GROUP__/ubuntu/g" config/lxd-classroom.service.template | sudo tee /etc/systemd/system/lxd-classroom.service
+sed \
+  -e "s/__RUN_USER__/ubuntu/g" \
+  -e "s/__RUN_GROUP__/ubuntu/g" \
+  -e "s/__CONTAINER_COUNT__/10/g" \
+  -e "s/__CONTAINER_IP_OFFSET__/10/g" \
+  -e "s/__LXD_BRIDGE_IP__/10.10.0.1/g" \
+  config/lxd-classroom.service.template | sudo tee /etc/systemd/system/lxd-classroom.service
+sudo systemctl daemon-reload
 sudo systemctl enable --now lxd-classroom
 ```
 
@@ -166,7 +180,10 @@ sudo modprobe br_netfilter
 #### 7. 컨테이너 생성
 
 ```bash
-bash scripts/create-containers.sh
+CONTAINER_COUNT=10 \
+CONTAINER_IP_OFFSET=10 \
+LXD_BRIDGE_IP=10.10.0.1 \
+bash app/scripts/create-containers.sh
 ```
 
 ---

@@ -219,48 +219,17 @@ app.post('/api/admin/reset', requireAdmin, (req, res) => {
   normalizedIds.forEach(id => resetStatus.set(id, 'resetting'));
   res.json({ ok: true, message: `${normalizedIds.length}개 컨테이너 초기화 시작` });
 
-  // 컨테이너가 exec 가능할 때까지 폴링 (최대 60초)
-  async function waitReady(cid) {
-    for (let i = 0; i < 30; i++) {
-      try {
-        await execAsync(`lxc exec server${cid} -- true`);
-        return;
-      } catch (_) {
-        await new Promise(r => setTimeout(r, 2000));
-      }
-    }
-    throw new Error(`server${cid} 부팅 타임아웃`);
-  }
-
-  // 컨테이너별 초기화 함수
+  // 컨테이너별 초기화 함수 - app/scripts/create-containers.sh 호출
   async function resetOne(id) {
     const cid = requireValidContainerId(id, '잘못된 ID');
-    const initialPassword = 'server' + cid;
     try {
-      const x = '< /dev/null';
-      await execAsync(`lxc stop server${cid} --force 2>/dev/null || true ${x}`);
-      await execAsync(`lxc delete server${cid} --force 2>/dev/null || true ${x}`);
-      await execAsync(`lxc storage volume delete default container/server${cid} 2>/dev/null || true ${x}`);
-      await execAsync(`sudo rm -rf /var/snap/lxd/common/lxd/storage-pools/default/containers/server${cid} 2>/dev/null || true ${x}`);
-      await execAsync(`lxc launch ubuntu:24.04 server${cid} --quiet ${x}`);
-      await execAsync(`lxc config set server${cid} boot.autostart true ${x}`);
-      await execAsync(`lxc config set server${cid} boot.autostart.delay 3 ${x}`);
-      await execAsync(`lxc config set server${cid} security.nesting true ${x}`);
-      await execAsync(`lxc config set server${cid} security.syscalls.intercept.mknod true ${x}`);
-      await execAsync(`lxc config set server${cid} security.syscalls.intercept.setxattr true ${x}`);
-      await execAsync(`lxc config set server${cid} limits.memory 8GB ${x}`);
-      await execAsync(`lxc config set server${cid} limits.memory.swap false ${x}`);
-      await waitReady(cid);
-      await execAsync(`lxc exec server${cid} -- useradd -m -s /bin/bash -G sudo server ${x}`);
-      await execAsync(`lxc exec server${cid} -- bash -c "echo 'server:${initialPassword}' | chpasswd" ${x}`);
-      await execAsync(`lxc exec server${cid} -- bash -c "echo server${cid} > /etc/hostname && hostname server${cid}" ${x}`);
-      await execAsync(`lxc exec server${cid} -- bash -c "touch /etc/cloud/cloud-init.disabled && systemctl disable cloud-init cloud-init-local cloud-config cloud-final 2>/dev/null || true" ${x}`);
-      const ip = containerIp(cid);
-      const netplanCfg = `network:\\n  version: 2\\n  ethernets:\\n    eth0:\\n      dhcp4: false\\n      addresses:\\n        - ${ip}/24\\n      routes:\\n        - to: default\\n          via: ${LXD_BRIDGE_IP}\\n      nameservers:\\n        addresses: [${LXD_BRIDGE_IP}, 8.8.8.8]\\n`;
-      await execAsync(`lxc exec server${cid} -- bash -c "printf '${netplanCfg}' > /etc/netplan/50-cloud-init.yaml" ${x}`);
-      await execAsync(`lxc exec server${cid} -- bash -c "ip addr flush dev eth0 2>/dev/null; ip addr add ${ip}/24 dev eth0; ip route add default via ${LXD_BRIDGE_IP} 2>/dev/null || true; printf 'nameserver ${LXD_BRIDGE_IP}\\nnameserver 8.8.8.8\\n' > /etc/resolv.conf" ${x}`);
-      await execAsync(`lxc config device add server${cid} eth0 nic nictype=bridged parent=lxdbr0 name=eth0 ipv4.address=${ip} 2>/dev/null || lxc config device set server${cid} eth0 ipv4.address=${ip} ${x}`);
-      await execAsync(`lxc exec server${cid} -- bash -c "grep -v 'nrconf{restart}' /etc/needrestart/needrestart.conf > /tmp/nr.conf 2>/dev/null && echo '\\\$nrconf{restart} = q(a);' >> /tmp/nr.conf && mv /tmp/nr.conf /etc/needrestart/needrestart.conf || true" ${x}`);
+      const scriptPath = path.join(__dirname, 'scripts', 'create-containers.sh');
+      const env = [
+        `CONTAINER_COUNT=${CONTAINER_COUNT}`,
+        `CONTAINER_IP_OFFSET=${CONTAINER_IP_OFFSET}`,
+        `LXD_BRIDGE_IP=${LXD_BRIDGE_IP}`,
+      ].join(' ');
+      await execAsync(`${env} bash "${scriptPath}" ${cid}`, { timeout: 300000 });
       if (clearNickname) {
         const data = loadData();
         data.nicknames[cid] = '';
