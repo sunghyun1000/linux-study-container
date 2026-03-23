@@ -7,13 +7,18 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #000; display: flex; flex-direction: column; height: 100vh; }
-  .topbar { background: #1e293b; padding: 0.5rem 1rem; display: flex; align-items: center; gap: 1rem; flex-shrink: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+  body { background: #000; display: flex; flex-direction: column; min-width: 0; }
+  .topbar { background: #1e293b; padding: 0.5rem 1rem; display: flex; align-items: center; gap: 1rem; flex-shrink: 0; min-width: 0; overflow: hidden; }
   .topbar span { color: #38bdf8; font-family: monospace; font-size: 0.9rem; }
+  .topbar > span:first-child { flex-shrink: 0; }
+  #server-label { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .topbar .tag { background: #0f172a; border: 1px solid #334155; border-radius: 4px; padding: 0.2rem 0.6rem; color: #94a3b8; font-size: 0.8rem; }
-  .btn-back { margin-left: auto; background: none; border: 1px solid #334155; border-radius: 6px; padding: 0.3rem 0.8rem; color: #94a3b8; cursor: pointer; font-size: 0.8rem; }
+  .btn-back { margin-left: auto; background: none; border: 1px solid #334155; border-radius: 6px; padding: 0.3rem 0.8rem; color: #94a3b8; cursor: pointer; font-size: 0.8rem; flex-shrink: 0; }
   .btn-back:hover { color: #e2e8f0; border-color: #94a3b8; }
-  #terminal { flex: 1; min-height: 0; padding: 4px; overflow: hidden; }
+  #terminal { flex: 1; min-height: 0; min-width: 0; padding: 4px; overflow: hidden; }
+  #terminal .xterm { height: 100%; }
+  #terminal .xterm-viewport { overflow-x: hidden !important; }
 </style>
 </head>
 <body>
@@ -39,12 +44,21 @@ const term = new Terminal({ cursorBlink: true, fontSize: 14, fontFamily: 'Consol
 const fitAddon = new FitAddon.FitAddon();
 term.loadAddon(fitAddon);
 term.open(document.getElementById('terminal'));
-fitAddon.fit();
+
+function syncTerminalSize() {
+  fitAddon.fit();
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+  }
+}
 
 const proto = location.protocol === 'https:' ? 'wss' : 'ws';
 const ws = new WebSocket(`${proto}://${location.host}/ws?token=${token}&type=student`);
 
-ws.onopen = () => { term.write('\r\n  연결 중...\r\n\r\n'); };
+ws.onopen = () => {
+  term.write('\r\n  연결 중...\r\n\r\n');
+  syncTerminalSize();
+};
 ws.onmessage = e => term.write(e.data);
 ws.onclose = () => term.write('\r\n\r\n  [ 연결이 종료되었습니다 ]\r\n');
 ws.onerror = () => term.write('\r\n  연결 오류\r\n');
@@ -66,10 +80,9 @@ document.addEventListener('keydown', (e) => {
   }
 }, true);
 
-window.addEventListener('resize', () => {
-  fitAddon.fit();
-  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-});
+window.addEventListener('resize', syncTerminalSize);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', syncTerminalSize);
+requestAnimationFrame(syncTerminalSize);
 
 function logout() { sessionStorage.clear(); location.href = '/'; }
 </script>
