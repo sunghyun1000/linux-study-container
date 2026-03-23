@@ -256,7 +256,7 @@ app.post('/api/admin/reset', requireAdmin, (req, res) => {
       const ip = containerIp(cid);
       const netplanCfg = `network:\\n  version: 2\\n  ethernets:\\n    eth0:\\n      dhcp4: false\\n      addresses:\\n        - ${ip}/24\\n      routes:\\n        - to: default\\n          via: ${LXD_BRIDGE_IP}\\n      nameservers:\\n        addresses: [${LXD_BRIDGE_IP}, 8.8.8.8]\\n`;
       await execAsync(`lxc exec server${cid} -- bash -c "printf '${netplanCfg}' > /etc/netplan/50-cloud-init.yaml" ${x}`);
-      await execAsync(`lxc exec server${cid} -- bash -c "ip addr flush dev eth0 2>/dev/null; ip addr add ${ip}/24 dev eth0; ip route add default via ${LXD_BRIDGE_IP} 2>/dev/null || true" ${x}`);
+      await execAsync(`lxc exec server${cid} -- bash -c "ip addr flush dev eth0 2>/dev/null; ip addr add ${ip}/24 dev eth0; ip route add default via ${LXD_BRIDGE_IP} 2>/dev/null || true; printf 'nameserver ${LXD_BRIDGE_IP}\\nnameserver 8.8.8.8\\n' > /etc/resolv.conf" ${x}`);
       await execAsync(`lxc config device add server${cid} eth0 nic nictype=bridged parent=lxdbr0 name=eth0 ipv4.address=${ip} 2>/dev/null || lxc config device set server${cid} eth0 ipv4.address=${ip} ${x}`);
       await execAsync(`lxc exec server${cid} -- bash -c "grep -v 'nrconf{restart}' /etc/needrestart/needrestart.conf > /tmp/nr.conf 2>/dev/null && echo '\\\$nrconf{restart} = q(a);' >> /tmp/nr.conf && mv /tmp/nr.conf /etc/needrestart/needrestart.conf || true" ${x}`);
       if (clearNickname) {

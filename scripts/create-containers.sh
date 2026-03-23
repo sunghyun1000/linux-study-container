@@ -73,7 +73,7 @@ network:
       nameservers:
         addresses: [${LXD_BRIDGE_IP}, 8.8.8.8]
 NETPLAN" < /dev/null
-  lxc exec "server$i" -- bash -c "ip addr flush dev eth0 2>/dev/null; ip addr add ${IP}/24 dev eth0; ip route add default via ${LXD_BRIDGE_IP} 2>/dev/null || true" < /dev/null
+  lxc exec "server$i" -- bash -c "ip addr flush dev eth0 2>/dev/null; ip addr add ${IP}/24 dev eth0; ip route add default via ${LXD_BRIDGE_IP} 2>/dev/null || true; printf 'nameserver ${LXD_BRIDGE_IP}\nnameserver 8.8.8.8\n' > /etc/resolv.conf" < /dev/null
 
   lxc exec "server$i" -- bash -c "grep -v 'nrconf{restart}' /etc/needrestart/needrestart.conf > /tmp/nr.conf 2>/dev/null; echo '\$nrconf{restart} = q(a);' >> /tmp/nr.conf; mv /tmp/nr.conf /etc/needrestart/needrestart.conf" < /dev/null
 
