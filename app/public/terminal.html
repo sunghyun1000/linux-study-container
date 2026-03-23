@@ -14,6 +14,11 @@
   .topbar > span:first-child { flex-shrink: 0; }
   #server-label { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .topbar .tag { background: #0f172a; border: 1px solid #334155; border-radius: 4px; padding: 0.2rem 0.6rem; color: #94a3b8; font-size: 0.8rem; }
+  .btn { background: none; border: 1px solid #334155; border-radius: 6px; padding: 0.3rem 0.8rem; color: #94a3b8; cursor: pointer; font-size: 0.8rem; flex-shrink: 0; }
+  .btn:hover { color: #e2e8f0; border-color: #94a3b8; }
+  .btn:disabled { color: #64748b; border-color: #334155; cursor: not-allowed; }
+  .btn-danger { border-color: #7f1d1d; color: #fca5a5; }
+  .btn-danger:hover { border-color: #dc2626; color: #fee2e2; }
   .btn-back { margin-left: auto; background: none; border: 1px solid #334155; border-radius: 6px; padding: 0.3rem 0.8rem; color: #94a3b8; cursor: pointer; font-size: 0.8rem; flex-shrink: 0; }
   .btn-back:hover { color: #e2e8f0; border-color: #94a3b8; }
   #terminal { flex: 1; min-height: 0; min-width: 0; padding: 4px; overflow: hidden; }
@@ -25,6 +30,7 @@
 <div class="topbar">
   <span>🐧 Linux 실습실</span>
   <span class="tag" id="server-label">서버 -</span>
+  <button class="btn btn-danger" id="reset-btn" onclick="resetServer()">서버 초기화</button>
   <button class="btn-back" onclick="logout()">← 나가기</button>
 </div>
 <div id="terminal"></div>
@@ -34,6 +40,7 @@
 const token = sessionStorage.getItem('token');
 const containerId = sessionStorage.getItem('containerId');
 const containerName = sessionStorage.getItem('containerName') || ('server' + containerId);
+let resetInProgress = false;
 if (!token) { location.href = '/'; }
 
 document.getElementById('server-label').textContent = containerName === ('server' + containerId)
@@ -83,6 +90,41 @@ document.addEventListener('keydown', (e) => {
 window.addEventListener('resize', syncTerminalSize);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', syncTerminalSize);
 requestAnimationFrame(syncTerminalSize);
+
+async function resetServer() {
+  if (resetInProgress) return;
+  const confirmed = window.confirm('정말 서버를 초기화하시겠습니까?\n현재 서버가 완전히 새로 생성되며, 기존 작업 내용은 모두 사라집니다.');
+  if (!confirmed) return;
+
+  const resetBtn = document.getElementById('reset-btn');
+  resetInProgress = true;
+  resetBtn.disabled = true;
+  resetBtn.textContent = '초기화 중...';
+
+  try {
+    const res = await fetch('/api/reset-self', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      resetInProgress = false;
+      resetBtn.disabled = false;
+      resetBtn.textContent = '서버 초기화';
+      window.alert(data.error || '초기화 요청에 실패했습니다.');
+      return;
+    }
+    if (ws.readyState === WebSocket.OPEN) ws.close();
+    sessionStorage.clear();
+    window.alert('서버 초기화가 시작되었습니다. 완료 후 다시 로그인하세요.');
+    location.href = '/';
+  } catch (_) {
+    resetInProgress = false;
+    resetBtn.disabled = false;
+    resetBtn.textContent = '서버 초기화';
+    window.alert('초기화 요청 중 오류가 발생했습니다.');
+  }
+}
 
 function logout() { sessionStorage.clear(); location.href = '/'; }
 </script>

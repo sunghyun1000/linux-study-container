@@ -132,6 +132,16 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+function requireStudent(req, res, next) {
+  const auth = req.headers.authorization || '';
+  const token = auth.replace('Bearer ', '');
+  const containerId = studentSessions.get(token);
+  if (!containerId) return res.status(401).json({ error: '인증 필요' });
+  req.studentToken = token;
+  req.studentContainerId = containerId;
+  next();
+}
+
 // ── 공개 API (학생용) ──────────────────────────────────────
 app.get('/api/containers', (req, res) => {
   const data = loadData();
@@ -204,6 +214,29 @@ app.put('/api/admin/teacher-password', requireAdmin, (req, res) => {
 // 초기화 진행 상태 추적
 const resetStatus = new Map(); // cid -> 'resetting' | 'done' | 'error'
 
+async function resetOneContainer(id, clearNickname) {
+  const cid = requireValidContainerId(id, '잘못된 ID');
+  try {
+    const scriptPath = path.join(__dirname, 'scripts', 'create-containers.sh');
+    const env = [
+      `CONTAINER_COUNT=${CONTAINER_COUNT}`,
+      `CONTAINER_IP_OFFSET=${CONTAINER_IP_OFFSET}`,
+      `LXD_BRIDGE_IP=${LXD_BRIDGE_IP}`,
+    ].join(' ');
+    await execAsync(`${env} bash "${scriptPath}" ${cid}`, { timeout: 300000 });
+    if (clearNickname) {
+      const data = loadData();
+      data.nicknames[cid] = '';
+      saveData(data);
+    }
+    resetStatus.set(cid, 'done');
+    console.log(`server${cid} 초기화 완료`);
+  } catch (e) {
+    resetStatus.set(cid, 'error');
+    console.error(`server${cid} 초기화 실패:`, e.message);
+  }
+}
+
 app.get('/api/admin/reset-status', requireAdmin, (req, res) => {
   const result = {};
   resetStatus.forEach((v, k) => { result[k] = v; });
@@ -222,33 +255,18 @@ app.post('/api/admin/reset', requireAdmin, (req, res) => {
 
   normalizedIds.forEach(id => resetStatus.set(id, 'resetting'));
   res.json({ ok: true, message: `${normalizedIds.length}개 컨테이너 초기화 시작` });
+  Promise.all(normalizedIds.map(id => resetOneContainer(id, clearNickname)));
+});
 
-  // 컨테이너별 초기화 함수 - app/scripts/create-containers.sh 호출
-  async function resetOne(id) {
-    const cid = requireValidContainerId(id, '잘못된 ID');
-    try {
-      const scriptPath = path.join(__dirname, 'scripts', 'create-containers.sh');
-      const env = [
-        `CONTAINER_COUNT=${CONTAINER_COUNT}`,
-        `CONTAINER_IP_OFFSET=${CONTAINER_IP_OFFSET}`,
-        `LXD_BRIDGE_IP=${LXD_BRIDGE_IP}`,
-      ].join(' ');
-      await execAsync(`${env} bash "${scriptPath}" ${cid}`, { timeout: 300000 });
-      if (clearNickname) {
-        const data = loadData();
-        data.nicknames[cid] = '';
-        saveData(data);
-      }
-      resetStatus.set(cid, 'done');
-      console.log(`server${cid} 초기화 완료`);
-    } catch (e) {
-      resetStatus.set(cid, 'error');
-      console.error(`server${cid} 초기화 실패:`, e.message);
-    }
+app.post('/api/reset-self', requireStudent, (req, res) => {
+  const cid = req.studentContainerId;
+  if (resetStatus.get(cid) === 'resetting') {
+    return res.status(409).json({ error: '이미 초기화가 진행 중입니다.' });
   }
-
-  // 모든 컨테이너 병렬 초기화
-  Promise.all(normalizedIds.map(resetOne));
+  resetStatus.set(cid, 'resetting');
+  studentSessions.delete(req.studentToken);
+  res.json({ ok: true, message: `server${cid} 초기화 시작` });
+  resetOneContainer(cid, false);
 });
 
 // ── WebSocket 터미널 ───────────────────────────────────────
