@@ -241,6 +241,7 @@ app.post('/api/admin/reset', requireAdmin, (req, res) => {
       await execAsync(`lxc stop server${cid} --force 2>/dev/null || true ${x}`);
       await execAsync(`lxc delete server${cid} --force 2>/dev/null || true ${x}`);
       await execAsync(`lxc storage volume delete default container/server${cid} 2>/dev/null || true ${x}`);
+      await execAsync(`sudo rm -rf /var/snap/lxd/common/lxd/storage-pools/default/containers/server${cid} 2>/dev/null || true ${x}`);
       await execAsync(`lxc launch ubuntu:24.04 server${cid} --quiet ${x}`);
       await execAsync(`lxc config set server${cid} boot.autostart true ${x}`);
       await execAsync(`lxc config set server${cid} boot.autostart.delay 3 ${x}`);

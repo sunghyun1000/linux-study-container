@@ -50,6 +50,7 @@ skkuding-linux/
 - 도메인 및 DNS 설정 완료
 - `apt-get` 또는 `dnf` 사용 가능
 - NetworkManager(`nmcli`) 사용 환경
+- 설치 및 운영에 사용하는 계정이 `sudo`를 비밀번호 없이 실행할 수 있는 `NOPASSWD` 권한 보유
 
 ### 빠른 설치
 
