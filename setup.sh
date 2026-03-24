@@ -83,6 +83,9 @@ if [[ ":$PATH:" != *":/snap/bin:"* ]]; then
   export PATH="$PATH:/snap/bin"
 fi
 
+LXD_BIN=""
+LXC_BIN=""
+
 NFTABLES_CONF="/etc/sysconfig/nftables.conf"
 if [[ "$PKG_MGR" == "apt" ]]; then
   NFTABLES_CONF="/etc/nftables.conf"
@@ -147,6 +150,37 @@ wait_for_lxc() {
   exit 1
 }
 
+resolve_lxd_binaries() {
+  local candidate
+
+  for candidate in \
+    "$(command -v lxd 2>/dev/null || true)" \
+    /snap/bin/lxd \
+    /var/lib/snapd/snap/bin/lxd
+  do
+    if [[ -n "$candidate" && -x "$candidate" ]]; then
+      LXD_BIN="$candidate"
+      break
+    fi
+  done
+
+  for candidate in \
+    "$(command -v lxc 2>/dev/null || true)" \
+    /snap/bin/lxc \
+    /var/lib/snapd/snap/bin/lxc
+  do
+    if [[ -n "$candidate" && -x "$candidate" ]]; then
+      LXC_BIN="$candidate"
+      break
+    fi
+  done
+
+  if [[ -z "$LXD_BIN" || -z "$LXC_BIN" ]]; then
+    echo "오류: LXD 바이너리 경로를 찾을 수 없습니다."
+    exit 1
+  fi
+}
+
 enable_extra_repos() {
   if [[ "$PKG_MGR" != "dnf" ]]; then
     return
@@ -193,6 +227,7 @@ install_lxd() {
 
   sudo usermod -aG lxd "$INSTALL_USER" 2>/dev/null || true
   wait_for_lxc
+  resolve_lxd_binaries
 }
 
 install_node() {
@@ -260,10 +295,11 @@ install_platform_tools() {
 }
 
 configure_lxd() {
-  sudo lxd init --minimal
-  sudo lxc network set lxdbr0 ipv4.address "${LXD_BRIDGE_IP}/24"
-  sudo lxc network set lxdbr0 ipv4.nat true
-  sudo lxc network set lxdbr0 ipv4.dhcp true
+  resolve_lxd_binaries
+  sudo "$LXD_BIN" init --minimal
+  sudo "$LXC_BIN" network set lxdbr0 ipv4.address "${LXD_BRIDGE_IP}/24"
+  sudo "$LXC_BIN" network set lxdbr0 ipv4.nat true
+  sudo "$LXC_BIN" network set lxdbr0 ipv4.dhcp true
   sudo usermod -aG lxd "$INSTALL_USER" 2>/dev/null || true
 
   if [[ -d "/home/$INSTALL_USER" ]]; then
