@@ -7,6 +7,22 @@ set -euo pipefail
 CONTAINER_COUNT="${CONTAINER_COUNT:-10}"
 CONTAINER_IP_OFFSET="${CONTAINER_IP_OFFSET:-10}"
 LXD_BRIDGE_IP="${LXD_BRIDGE_IP:-10.10.0.1}"
+PATH="$PATH:/snap/bin"
+LXC_BIN="$(command -v lxc 2>/dev/null || true)"
+LXD_BIN="$(command -v lxd 2>/dev/null || true)"
+
+if [[ -z "$LXC_BIN" && -x /snap/bin/lxc ]]; then
+  LXC_BIN=/snap/bin/lxc
+fi
+
+if [[ -z "$LXD_BIN" && -x /snap/bin/lxd ]]; then
+  LXD_BIN=/snap/bin/lxd
+fi
+
+if [[ -z "$LXC_BIN" || -z "$LXD_BIN" ]]; then
+  echo "오류: lxc 또는 lxd 명령을 찾을 수 없습니다."
+  exit 1
+fi
 
 # 생성할 컨테이너 ID 목록 결정
 if [[ $# -gt 0 ]]; then
@@ -27,57 +43,57 @@ setup_container() {
 
   # 기존 컨테이너 및 고아 볼륨 정리
   # 1) CLI 방식 (정상 케이스)
-  lxc stop "server$i" --force 2>/dev/null < /dev/null || true
-  lxc delete "server$i" --force 2>/dev/null < /dev/null || true
+  "$LXC_BIN" stop "server$i" --force 2>/dev/null < /dev/null || true
+  "$LXC_BIN" delete "server$i" --force 2>/dev/null < /dev/null || true
   # 2) REST API 방식 (CLI가 부분 생성 상태를 인식 못할 때 대비)
-  lxc query -X DELETE "/1.0/instances/server$i" 2>/dev/null < /dev/null || true
-  lxc query -X DELETE "/1.0/storage-pools/default/volumes/container/server$i" 2>/dev/null < /dev/null || true
+  "$LXC_BIN" query -X DELETE "/1.0/instances/server$i" 2>/dev/null < /dev/null || true
+  "$LXC_BIN" query -X DELETE "/1.0/storage-pools/default/volumes/container/server$i" 2>/dev/null < /dev/null || true
   # 3) 파일시스템 정리
   sudo rm -rf "/var/snap/lxd/common/lxd/storage-pools/default/containers/server$i" 2>/dev/null || true
   # 4) DB 고아 레코드 직접 삭제 (type=0 은 container 볼륨)
-  sudo /var/lib/snapd/snap/bin/lxd sql global \
+  "$LXD_BIN" sql global \
     "DELETE FROM storage_volumes WHERE name='server$i' AND type=0 \
      AND storage_pool_id=(SELECT id FROM storage_pools WHERE name='default')" \
     2>/dev/null || true
 
   # 컨테이너 생성 및 기본 설정
-  lxc launch ubuntu:24.04 "server$i" --quiet < /dev/null
-  lxc config set "server$i" boot.autostart true < /dev/null
-  lxc config set "server$i" boot.autostart.delay 3 < /dev/null
-  lxc config set "server$i" security.nesting true < /dev/null
-  lxc config set "server$i" security.syscalls.intercept.mknod true < /dev/null
-  lxc config set "server$i" security.syscalls.intercept.setxattr true < /dev/null
-  lxc config set "server$i" limits.memory 8GB < /dev/null
-  lxc config set "server$i" limits.memory.swap false < /dev/null
-  lxc config device add "server$i" eth0 nic nictype=bridged parent=lxdbr0 name=eth0 \
+  "$LXC_BIN" launch ubuntu:24.04 "server$i" --quiet < /dev/null
+  "$LXC_BIN" config set "server$i" boot.autostart true < /dev/null
+  "$LXC_BIN" config set "server$i" boot.autostart.delay 3 < /dev/null
+  "$LXC_BIN" config set "server$i" security.nesting true < /dev/null
+  "$LXC_BIN" config set "server$i" security.syscalls.intercept.mknod true < /dev/null
+  "$LXC_BIN" config set "server$i" security.syscalls.intercept.setxattr true < /dev/null
+  "$LXC_BIN" config set "server$i" limits.memory 8GB < /dev/null
+  "$LXC_BIN" config set "server$i" limits.memory.swap false < /dev/null
+  "$LXC_BIN" config device add "server$i" eth0 nic nictype=bridged parent=lxdbr0 name=eth0 \
     ipv4.address="$IP" 2>/dev/null < /dev/null || \
-  lxc config device set "server$i" eth0 ipv4.address="$IP" < /dev/null
+  "$LXC_BIN" config device set "server$i" eth0 ipv4.address="$IP" < /dev/null
 
   # 부팅 대기 (최대 60초)
   for attempt in $(seq 1 30); do
-    lxc exec "server$i" -- true < /dev/null 2>/dev/null && break
+    "$LXC_BIN" exec "server$i" -- true < /dev/null 2>/dev/null && break
     sleep 2
   done
 
   # 사용자 생성
-  lxc exec "server$i" -- useradd -m -s /bin/bash -G sudo server < /dev/null
-  lxc exec "server$i" -- bash -c "echo 'server:${PASS}' | chpasswd" < /dev/null
-  lxc exec "server$i" -- bash -c "echo server$i > /etc/hostname && hostname server$i" < /dev/null
+  "$LXC_BIN" exec "server$i" -- useradd -m -s /bin/bash -G sudo server < /dev/null
+  "$LXC_BIN" exec "server$i" -- bash -c "echo 'server:${PASS}' | chpasswd" < /dev/null
+  "$LXC_BIN" exec "server$i" -- bash -c "echo server$i > /etc/hostname && hostname server$i" < /dev/null
 
   # cloud-init 비활성화
-  lxc exec "server$i" -- bash -c \
+  "$LXC_BIN" exec "server$i" -- bash -c \
     "touch /etc/cloud/cloud-init.disabled && \
      systemctl disable cloud-init cloud-init-local cloud-config cloud-final 2>/dev/null || true" \
     < /dev/null
 
   # 네트워크 설정
   # 10-lxd.yaml (LXD 자동 생성)도 dhcp4:false로 덮어써서 DHCP 완전 차단
-  lxc exec "server$i" -- bash -c \
+  "$LXC_BIN" exec "server$i" -- bash -c \
     "printf 'network:\n  version: 2\n  ethernets:\n    eth0:\n      dhcp4: false\n' \
      > /etc/netplan/10-lxd.yaml" < /dev/null
 
   # 정적 IP netplan 설정 (재부팅 후 유지용)
-  lxc exec "server$i" -- bash -c "cat > /etc/netplan/50-cloud-init.yaml << 'NETPLAN'
+  "$LXC_BIN" exec "server$i" -- bash -c "cat > /etc/netplan/50-cloud-init.yaml << 'NETPLAN'
 network:
   version: 2
   ethernets:
@@ -93,7 +109,7 @@ network:
 NETPLAN" < /dev/null
 
   # ip 명령으로 즉시 적용
-  lxc exec "server$i" -- bash -c \
+  "$LXC_BIN" exec "server$i" -- bash -c \
     "ip addr flush dev eth0 2>/dev/null; \
      ip addr add ${IP}/24 dev eth0; \
      ip route add default via ${LXD_BRIDGE_IP} 2>/dev/null || true; \
@@ -101,7 +117,7 @@ NETPLAN" < /dev/null
     < /dev/null
 
   # needrestart 무음 처리
-  lxc exec "server$i" -- bash -c \
+  "$LXC_BIN" exec "server$i" -- bash -c \
     "grep -v 'nrconf{restart}' /etc/needrestart/needrestart.conf > /tmp/nr.conf 2>/dev/null; \
      echo '\$nrconf{restart} = q(a);' >> /tmp/nr.conf; \
      mv /tmp/nr.conf /etc/needrestart/needrestart.conf" \

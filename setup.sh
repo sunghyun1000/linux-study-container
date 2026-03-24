@@ -418,10 +418,12 @@ configure_services() {
 
 create_containers() {
   echo "=== 9. 컨테이너 생성 (약 5~10분) ==="
-  CONTAINER_COUNT="$CONTAINER_COUNT" \
-  CONTAINER_IP_OFFSET="$CONTAINER_IP_OFFSET" \
-  LXD_BRIDGE_IP="$LXD_BRIDGE_IP" \
-  bash /opt/lxd-classroom/scripts/create-containers.sh
+  sudo env \
+    CONTAINER_COUNT="$CONTAINER_COUNT" \
+    CONTAINER_IP_OFFSET="$CONTAINER_IP_OFFSET" \
+    LXD_BRIDGE_IP="$LXD_BRIDGE_IP" \
+    PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin" \
+    bash /opt/lxd-classroom/scripts/create-containers.sh
 }
 
 install_lxd
