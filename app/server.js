@@ -261,36 +261,68 @@ app.put('/api/admin/teacher-password', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// 초기화 진행 상태 추적
-const resetStatus = new Map(); // cid -> 'resetting' | 'done' | 'error'
+// ── 초기화 큐 ─────────────────────────────────────────────
+const resetStatus = new Map(); // cid -> 'pending' | 'resetting' | 'done' | 'error'
+const resetQueue = [];         // [{cid, clearNickname}] 순서대로 대기
+let resetQueueRunning = false;
 
-async function resetOneContainer(id, clearNickname) {
-  const cid = requireValidContainerId(id, '잘못된 ID');
-  try {
+const RESET_SCRIPT_ENV = () => [
+  `CONTAINER_COUNT=${CONTAINER_COUNT}`,
+  `CONTAINER_IP_OFFSET=${CONTAINER_IP_OFFSET}`,
+  `LXD_BRIDGE_IP=${LXD_BRIDGE_IP}`,
+].join(' ');
+
+async function processResetQueue() {
+  if (resetQueueRunning) return;
+  resetQueueRunning = true;
+  while (resetQueue.length > 0) {
+    const { cid, clearNickname } = resetQueue[0];
+    resetStatus.set(cid, 'resetting');
     const scriptPath = path.join(__dirname, 'scripts', 'create-containers.sh');
-    const env = [
-      `CONTAINER_COUNT=${CONTAINER_COUNT}`,
-      `CONTAINER_IP_OFFSET=${CONTAINER_IP_OFFSET}`,
-      `LXD_BRIDGE_IP=${LXD_BRIDGE_IP}`,
-    ].join(' ');
-    await execAsync(`${env} bash "${scriptPath}" ${cid}`, { timeout: 300000 });
-    if (clearNickname) {
-      const data = loadData();
-      data.nicknames[cid] = '';
-      saveData(data);
+    let succeeded = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await execAsync(`${RESET_SCRIPT_ENV()} bash "${scriptPath}" ${cid}`, { timeout: 300000 });
+        succeeded = true;
+        break;
+      } catch (e) {
+        console.error(`server${cid} 초기화 실패 (${attempt}/3):`, e.message);
+      }
     }
-    resetStatus.set(cid, 'done');
-    console.log(`server${cid} 초기화 완료`);
-  } catch (e) {
-    resetStatus.set(cid, 'error');
-    console.error(`server${cid} 초기화 실패:`, e.message);
+    if (succeeded) {
+      if (clearNickname) {
+        const data = loadData();
+        data.nicknames[cid] = '';
+        saveData(data);
+      }
+      resetStatus.set(cid, 'done');
+      console.log(`server${cid} 초기화 완료`);
+    } else {
+      resetStatus.set(cid, 'error');
+    }
+    resetQueue.shift();
   }
+  resetQueueRunning = false;
+}
+
+function enqueueReset(cid, clearNickname) {
+  const s = resetStatus.get(cid);
+  if (s === 'pending' || s === 'resetting') return false;
+  resetQueue.push({ cid, clearNickname });
+  resetStatus.set(cid, 'pending');
+  processResetQueue();
+  return true;
+}
+
+function resetQueueInfo() {
+  const queueCids = resetQueue.map(item => item.cid);
+  return { queue: queueCids, total: queueCids.length };
 }
 
 app.get('/api/admin/reset-status', requireAdmin, (req, res) => {
-  const result = {};
-  resetStatus.forEach((v, k) => { result[k] = v; });
-  res.json(result);
+  const status = {};
+  resetStatus.forEach((v, k) => { status[k] = v; });
+  res.json({ status, ...resetQueueInfo() });
 });
 
 app.post('/api/admin/reset', requireAdmin, (req, res) => {
@@ -302,21 +334,17 @@ app.post('/api/admin/reset', requireAdmin, (req, res) => {
   } catch (error) {
     return res.status(error.status || 400).json({ error: error.message });
   }
-
-  normalizedIds.forEach(id => resetStatus.set(id, 'resetting'));
-  res.json({ ok: true, message: `${normalizedIds.length}개 컨테이너 초기화 시작` });
-  Promise.all(normalizedIds.map(id => resetOneContainer(id, clearNickname)));
+  const queued = normalizedIds.filter(id => enqueueReset(id, clearNickname)).length;
+  res.json({ ok: true, message: `${queued}개 컨테이너 초기화 대기열에 추가됨` });
 });
 
 app.post('/api/reset-self', requireStudent, (req, res) => {
   const cid = req.studentContainerId;
-  if (resetStatus.get(cid) === 'resetting') {
-    return res.status(409).json({ error: '이미 초기화가 진행 중입니다.' });
-  }
-  resetStatus.set(cid, 'resetting');
+  const queued = enqueueReset(cid, false);
+  if (!queued) return res.status(409).json({ error: '이미 초기화 대기 또는 진행 중입니다.' });
   studentSessions.delete(req.studentToken);
-  res.json({ ok: true, message: `server${cid} 초기화 시작` });
-  resetOneContainer(cid, false);
+  const pos = resetQueue.findIndex(item => item.cid === cid) + 1;
+  res.json({ ok: true, message: `server${cid} 초기화 대기열 등록 (${pos}번째)` });
 });
 
 // ── WebSocket 터미널 ───────────────────────────────────────
