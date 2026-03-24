@@ -26,15 +26,14 @@ setup_container() {
   echo "--- server$i 생성 중 (IP: $IP) ---"
 
   # 기존 컨테이너 및 고아 볼륨 정리
+  # 1) CLI 방식 (정상 케이스)
   lxc stop "server$i" --force 2>/dev/null < /dev/null || true
   lxc delete "server$i" --force 2>/dev/null < /dev/null || true
-  lxc storage volume delete default "container/server$i" 2>/dev/null < /dev/null || true
+  # 2) REST API 방식 (CLI가 부분 생성 상태를 인식 못할 때 대비)
+  lxc query -X DELETE "/1.0/instances/server$i" 2>/dev/null < /dev/null || true
+  lxc query -X DELETE "/1.0/storage-pools/default/volumes/container/server$i" 2>/dev/null < /dev/null || true
+  # 3) 파일시스템 정리
   sudo rm -rf "/var/snap/lxd/common/lxd/storage-pools/default/containers/server$i" 2>/dev/null || true
-  # LXD DB에 남은 고아 레코드 제거 (UNIQUE constraint 방지)
-  lxc admin sql global \
-    "DELETE FROM storage_volumes WHERE name='server$i' AND type=2 \
-     AND storage_pool_id=(SELECT id FROM storage_pools WHERE name='default')" \
-    2>/dev/null < /dev/null || true
 
   # 컨테이너 생성 및 기본 설정
   lxc launch ubuntu:24.04 "server$i" --quiet < /dev/null
