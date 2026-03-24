@@ -287,10 +287,10 @@ install_platform_tools() {
   echo "=== 3. 기본 패키지 설치 ==="
 
   if [[ "$PKG_MGR" == "apt" ]]; then
-    pkg_install curl gawk jq nftables network-manager python3 snapd
+    pkg_install build-essential curl gawk jq make nftables network-manager python3 snapd
   else
     enable_extra_repos
-    pkg_install curl gawk jq nftables NetworkManager python3 snapd
+    pkg_install @development-tools curl gcc-c++ gawk jq make nftables NetworkManager python3 snapd
   fi
 }
 
