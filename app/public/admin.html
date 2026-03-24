@@ -237,8 +237,9 @@ async function loadContainers() {
 
   // 페이지 재진입 시 진행 중인 초기화 복원
   const statusRes = await fetch('/api/admin/reset-status', { headers });
-  const status = await statusRes.json();
-  const resumeIds = Object.entries(status).filter(([, v]) => v === 'resetting').map(([k]) => k);
+  const statusData = await statusRes.json();
+  const statusMap = statusData.status || statusData;
+  const resumeIds = Object.entries(statusMap).filter(([, v]) => v === 'resetting' || v === 'pending').map(([k]) => k);
   if (resumeIds.length > 0) {
     pendingResetIds = resumeIds;
     toast(`초기화 진행 중: ${resumeIds.map(i => 'server' + i).join(', ')}`, 'info', 5000);
@@ -350,9 +351,10 @@ function startResetPolling(ids) {
   if (resetPollingTimer) clearInterval(resetPollingTimer);
   resetPollingTimer = setInterval(async () => {
     const r = await fetch('/api/admin/reset-status', { headers: { Authorization: 'Bearer ' + adminToken } });
-    const status = await r.json();
+    const statusData = await r.json();
+    const statusMap = statusData.status || statusData;
     for (const id of [...pendingResetIds]) {
-      const s = status[id];
+      const s = statusMap[id];
       if (s === 'done') {
         toast(`server${id} 초기화 완료`, 'success');
         pendingResetIds = pendingResetIds.filter(x => x !== id);
