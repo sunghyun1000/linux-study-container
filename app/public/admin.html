@@ -44,6 +44,7 @@
   .badge-running { background: #064e3b; color: #34d399; }
   .badge-stopped { background: #3b1f1f; color: #f87171; }
   .badge-resetting { background: #1e3a5f; color: #60a5fa; }
+  .badge-pending   { background: #2d2a1a; color: #fbbf24; }
   .badge-done { background: #064e3b; color: #34d399; }
   .badge-error { background: #3b1f1f; color: #f87171; }
   .chk { width: 18px; height: 18px; cursor: pointer; accent-color: #0ea5e9; }
@@ -191,6 +192,7 @@ let adminToken = null;
 let containers = [];
 let pendingResetIds = [];
 let resetPollingTimer = null;
+let resetQueueInfo = { queue: [], total: 0 };
 
 function updateDiskSummary(summary = {}) {
   document.getElementById('disk-total').textContent = summary.total || '-';
@@ -239,6 +241,7 @@ async function loadContainers() {
   const statusRes = await fetch('/api/admin/reset-status', { headers });
   const statusData = await statusRes.json();
   const statusMap = statusData.status || statusData;
+  resetQueueInfo = { queue: statusData.queue || [], total: statusData.total || 0 };
   const resumeIds = Object.entries(statusMap).filter(([, v]) => v === 'resetting' || v === 'pending').map(([k]) => k);
   if (resumeIds.length > 0) {
     pendingResetIds = resumeIds;
@@ -255,9 +258,14 @@ function renderTable() {
   containers.forEach(c => {
     const isResetting = pendingResetIds.includes(c.id);
     const displayState = isResetting ? 'resetting' : c.state;
-    const stateBadge = displayState === 'running' ? '<span class="badge badge-running">● 실행중</span>'
-      : displayState === 'resetting' ? '<span class="badge badge-resetting">↺ 초기화중</span>'
-      : '<span class="badge badge-stopped">○ 중지됨</span>';
+    const queuePos = resetQueueInfo.queue.indexOf(c.id);
+    const stateBadge = displayState === 'running'
+      ? '<span class="badge badge-running">● 실행중</span>'
+      : displayState === 'resetting' && queuePos === -1
+        ? '<span class="badge badge-resetting">↺ 초기화중</span>'
+        : displayState === 'resetting' && queuePos !== -1
+          ? `<span class="badge badge-pending">⏳ ${queuePos + 1}/${resetQueueInfo.total} 대기중</span>`
+          : '<span class="badge badge-stopped">○ 중지됨</span>';
     const tr = document.createElement('tr');
     tr.id = `row-${c.id}`;
     tr.innerHTML = `
@@ -353,6 +361,7 @@ function startResetPolling(ids) {
     const r = await fetch('/api/admin/reset-status', { headers: { Authorization: 'Bearer ' + adminToken } });
     const statusData = await r.json();
     const statusMap = statusData.status || statusData;
+    resetQueueInfo = { queue: statusData.queue || [], total: statusData.total || 0 };
     for (const id of [...pendingResetIds]) {
       const s = statusMap[id];
       if (s === 'done') {
@@ -363,6 +372,15 @@ function startResetPolling(ids) {
       } else if (s === 'error') {
         toast(`server${id} 초기화 실패`, 'error', 6000);
         pendingResetIds = pendingResetIds.filter(x => x !== id);
+      } else if (s === 'resetting' || s === 'pending') {
+        // 큐 위치 실시간 업데이트
+        const stateCell = document.getElementById('state-' + id);
+        const queuePos = resetQueueInfo.queue.indexOf(id);
+        if (stateCell) {
+          stateCell.innerHTML = queuePos !== -1
+            ? `<span class="badge badge-pending">⏳ ${queuePos + 1}/${resetQueueInfo.total} 대기중</span>`
+            : '<span class="badge badge-resetting">↺ 초기화중</span>';
+        }
       }
     }
     if (pendingResetIds.length === 0) {
