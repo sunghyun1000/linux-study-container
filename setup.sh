@@ -79,6 +79,10 @@ else
   exit 1
 fi
 
+if [[ ":$PATH:" != *":/snap/bin:"* ]]; then
+  export PATH="$PATH:/snap/bin"
+fi
+
 NFTABLES_CONF="/etc/sysconfig/nftables.conf"
 if [[ "$PKG_MGR" == "apt" ]]; then
   NFTABLES_CONF="/etc/nftables.conf"
@@ -111,6 +115,38 @@ pkg_install() {
   fi
 }
 
+ensure_snapd() {
+  if command -v snap >/dev/null 2>&1; then
+    return
+  fi
+
+  if [[ "$PKG_MGR" == "apt" ]]; then
+    pkg_install snapd
+  else
+    pkg_install snapd
+  fi
+}
+
+ensure_snap_path() {
+  if [[ ! -e /snap ]]; then
+    sudo ln -s /var/lib/snapd/snap /snap
+  fi
+}
+
+wait_for_lxc() {
+  local tries=0
+  while (( tries < 30 )); do
+    if command -v lxc >/dev/null 2>&1; then
+      return
+    fi
+    sleep 1
+    tries=$((tries + 1))
+  done
+
+  echo "오류: lxc 명령을 찾을 수 없습니다. snap 기반 LXD 설치가 완료되지 않았습니다."
+  exit 1
+}
+
 enable_extra_repos() {
   if [[ "$PKG_MGR" != "dnf" ]]; then
     return
@@ -137,30 +173,26 @@ enable_extra_repos() {
 }
 
 install_lxd() {
-  if command -v lxd >/dev/null 2>&1 && command -v lxc >/dev/null 2>&1; then
+  if snap list lxd >/dev/null 2>&1 && command -v lxc >/dev/null 2>&1; then
     return
   fi
 
   echo "=== 1. LXD 설치 ==="
 
-  if [[ "$PKG_MGR" == "apt" ]]; then
-    pkg_install lxd lxd-client uidmap
-  else
-    enable_extra_repos
-    if ! pkg_install lxd lxd-client; then
-      echo "오류: 이 dnf 기반 배포판에서 lxd/lxd-client 패키지를 설치하지 못했습니다."
-      echo "지원 저장소(EPEL/추가 리포지터리)에서 LXD 패키지가 제공되는지 확인하세요."
-      exit 1
-    fi
+  ensure_snapd
+  sudo systemctl enable --now snapd.socket
+  ensure_snap_path
+
+  if ! snap list lxd >/dev/null 2>&1; then
+    sudo snap install lxd
   fi
 
-  if systemctl list-unit-files | grep -q '^lxd\.service'; then
-    sudo systemctl enable --now lxd
+  if systemctl list-unit-files | grep -q '^snap\.lxd\.daemon\.service'; then
+    sudo systemctl enable --now snap.lxd.daemon
   fi
 
-  if [[ "$PKG_MGR" == "apt" && -S /var/lib/lxd/unix.socket ]]; then
-    sudo usermod -aG lxd "$INSTALL_USER" 2>/dev/null || true
-  fi
+  sudo usermod -aG lxd "$INSTALL_USER" 2>/dev/null || true
+  wait_for_lxc
 }
 
 install_node() {
@@ -220,26 +252,22 @@ install_platform_tools() {
   echo "=== 3. 기본 패키지 설치 ==="
 
   if [[ "$PKG_MGR" == "apt" ]]; then
-    pkg_install curl gawk jq nftables network-manager python3
+    pkg_install curl gawk jq nftables network-manager python3 snapd
   else
     enable_extra_repos
-    pkg_install curl gawk jq nftables NetworkManager python3
+    pkg_install curl gawk jq nftables NetworkManager python3 snapd
   fi
 }
 
 configure_lxd() {
-  if [[ "$PKG_MGR" == "apt" ]]; then
-    sudo lxd init --minimal
-    sudo lxc network set lxdbr0 ipv4.address "${LXD_BRIDGE_IP}/24"
-    sudo lxc network set lxdbr0 ipv4.nat true
-    sudo lxc network set lxdbr0 ipv4.dhcp true
-    sudo usermod -aG lxd "$INSTALL_USER" 2>/dev/null || true
+  sudo lxd init --minimal
+  sudo lxc network set lxdbr0 ipv4.address "${LXD_BRIDGE_IP}/24"
+  sudo lxc network set lxdbr0 ipv4.nat true
+  sudo lxc network set lxdbr0 ipv4.dhcp true
+  sudo usermod -aG lxd "$INSTALL_USER" 2>/dev/null || true
+
+  if [[ -d "/home/$INSTALL_USER" ]]; then
     sudo install -d -o "$INSTALL_USER" -g "$INSTALL_USER" "/home/$INSTALL_USER/.config"
-  else
-    sudo lxd init --minimal
-    sudo lxc network set lxdbr0 ipv4.address "${LXD_BRIDGE_IP}/24"
-    sudo lxc network set lxdbr0 ipv4.nat true
-    sudo lxc network set lxdbr0 ipv4.dhcp true
   fi
 }
 
