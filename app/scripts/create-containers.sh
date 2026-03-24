@@ -34,6 +34,11 @@ setup_container() {
   lxc query -X DELETE "/1.0/storage-pools/default/volumes/container/server$i" 2>/dev/null < /dev/null || true
   # 3) 파일시스템 정리
   sudo rm -rf "/var/snap/lxd/common/lxd/storage-pools/default/containers/server$i" 2>/dev/null || true
+  # 4) DB 고아 레코드 직접 삭제 (type=0 은 container 볼륨)
+  sudo /var/lib/snapd/snap/bin/lxd sql global \
+    "DELETE FROM storage_volumes WHERE name='server$i' AND type=0 \
+     AND storage_pool_id=(SELECT id FROM storage_pools WHERE name='default')" \
+    2>/dev/null || true
 
   # 컨테이너 생성 및 기본 설정
   lxc launch ubuntu:24.04 "server$i" --quiet < /dev/null
