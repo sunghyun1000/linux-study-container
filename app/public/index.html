@@ -10,12 +10,9 @@
   .container { width: 100%; max-width: 480px; padding: 2rem; }
   h1 { text-align: center; font-size: 1.8rem; margin-bottom: 0.5rem; color: #38bdf8; }
   .subtitle { text-align: center; color: #94a3b8; margin-bottom: 2rem; font-size: 0.9rem; }
-  /* 단계 1: 서버 선택 */
-  #step-select { }
-  .container-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0; max-height: 420px; overflow-y: auto; }
+  .container-list { display: flex; flex-direction: column; gap: 0.5rem; max-height: 420px; overflow-y: auto; }
   .container-item { display: flex; align-items: center; gap: 1rem; background: #1e293b; border: 2px solid #1e293b; border-radius: 10px; padding: 0.85rem 1.1rem; cursor: pointer; transition: all 0.15s; }
   .container-item:hover { border-color: #38bdf8; background: #1e3a4f; }
-  .container-item.selected { border-color: #0ea5e9; background: #0c2d45; }
   .container-item.disabled { cursor: not-allowed; opacity: 0.6; border-color: #334155; background: #111827; }
   .container-item.disabled:hover { border-color: #334155; background: #111827; }
   .c-num { font-size: 0.75rem; font-family: monospace; color: #475569; min-width: 60px; }
@@ -26,10 +23,8 @@
   .c-status { font-size: 0.78rem; color: #fbbf24; }
   .ssh-header { display: flex; align-items: center; justify-content: center; gap: 0.4rem; margin-bottom: 0.5rem; }
   .ssh-header span { font-size: 0.82rem; color: #94a3b8; }
-  /* ? 아이콘 */
   .tooltip-icon { width: 15px; height: 15px; border-radius: 50%; background: #334155; color: #94a3b8; font-size: 0.65rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
   .tooltip-icon:hover { background: #475569; }
-  /* SSH 모달 */
   .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); align-items: center; justify-content: center; z-index: 100; }
   .modal-bg.open { display: flex; }
   .modal { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 1.5rem 1.75rem; width: 90%; max-width: 480px; line-height: 1.8; font-size: 0.85rem; color: #cbd5e1; position: relative; }
@@ -37,20 +32,6 @@
   .modal code { background: #0f172a; border-radius: 4px; padding: 0.1rem 0.4rem; font-size: 0.8rem; color: #7dd3fc; word-break: break-all; }
   .modal-close { position: absolute; top: 0.9rem; right: 1rem; background: none; border: none; color: #64748b; font-size: 1.2rem; cursor: pointer; line-height: 1; }
   .modal-close:hover { color: #94a3b8; }
-  /* 단계 2: 비밀번호 입력 */
-  #step-password { display: none; }
-  .back-btn { background: none; border: none; color: #64748b; font-size: 0.85rem; cursor: pointer; padding: 0 0 1rem 0; display: flex; align-items: center; gap: 0.3rem; }
-  .back-btn:hover { color: #94a3b8; }
-  .selected-info { background: #1e293b; border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem; }
-  .selected-info .c-num { font-size: 0.8rem; }
-  .selected-info .c-name { font-size: 1.05rem; }
-  input[type=password] { width: 100%; background: #0f172a; border: 2px solid #334155; border-radius: 8px; padding: 0.75rem 1rem; color: #e2e8f0; font-size: 1rem; outline: none; margin-bottom: 1rem; }
-  input[type=password]:focus { border-color: #38bdf8; }
-  .btn-primary { width: 100%; background: #0ea5e9; border: none; border-radius: 8px; padding: 0.85rem; color: white; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.2s; }
-  .btn-primary:hover { background: #0284c7; }
-  .btn-primary:disabled { background: #334155; color: #94a3b8; cursor: not-allowed; }
-  .error { color: #f87171; font-size: 0.875rem; margin-top: 0.5rem; text-align: center; }
-  .info { color: #fbbf24; font-size: 0.875rem; margin-top: 0.5rem; text-align: center; }
   .admin-link { text-align: center; margin-top: 1.5rem; }
   .admin-link a { color: #475569; font-size: 0.8rem; text-decoration: none; }
   .admin-link a:hover { color: #94a3b8; }
@@ -59,34 +40,18 @@
 <body>
 <div class="container">
   <h1>🐧 Linux 실습실</h1>
-
-  <!-- 단계 1: 서버 선택 -->
-  <div id="step-select">
-    <p class="subtitle">접속할 서버를 선택하세요</p>
-    <div class="container-list" id="container-list">
-      <div style="text-align:center;color:#475569;padding:2rem">불러오는 중...</div>
-    </div>
-  </div>
-
-  <!-- 단계 2: 비밀번호 입력 -->
-  <div id="step-password">
-    <button class="back-btn" onclick="goBack()">← 다시 선택</button>
-    <div class="selected-info" id="selected-info"></div>
-    <input type="password" id="password" placeholder="비밀번호 입력" autofocus />
-    <button class="btn-primary" id="login-btn" onclick="login()">접속</button>
-    <div class="info" id="info"></div>
-    <div class="error" id="error"></div>
+  <p class="subtitle">접속할 서버를 선택하세요</p>
+  <div class="container-list" id="container-list">
+    <div style="text-align:center;color:#475569;padding:2rem">불러오는 중...</div>
   </div>
 
   <div class="ssh-header" style="margin-top:1.25rem;margin-bottom:0.5rem">
     <span>SSH 직접 접속</span>
     <span class="tooltip-icon" onclick="document.getElementById('ssh-modal').classList.add('open')">?</span>
   </div>
-
-  <div class="admin-link"><a href="/admin.html">관리자 로그인</a></div>
+  <div class="admin-link"><a href="/admin-login.html">관리자 로그인</a></div>
 </div>
 
-<!-- SSH 안내 모달 -->
 <div class="modal-bg" id="ssh-modal" onclick="if(event.target===this)this.classList.remove('open')">
   <div class="modal">
     <button class="modal-close" onclick="document.getElementById('ssh-modal').classList.remove('open')">✕</button>
@@ -108,13 +73,11 @@
   </div>
 </div>
 <script>
-let selected = null;
-let containers = [];
 let refreshTimer = null;
 
 async function loadContainers() {
   const res = await fetch('/api/containers');
-  containers = await res.json();
+  const containers = await res.json();
   const list = document.getElementById('container-list');
   list.innerHTML = '';
   containers.forEach(c => {
@@ -131,79 +94,13 @@ async function loadContainers() {
     `;
     item.onclick = () => {
       if (c.isResetting) return;
-      selectContainer(c, item);
+      sessionStorage.setItem('selectedId', c.id);
+      sessionStorage.setItem('selectedName', c.nickname || 'server' + c.id);
+      sessionStorage.setItem('selectedExternalIp', c.externalIp || '');
+      location.href = '/login.html';
     };
     list.appendChild(item);
   });
-  syncSelectedState();
-}
-
-function selectContainer(c, el) {
-  selected = c;
-  document.getElementById('step-select').style.display = 'none';
-  document.getElementById('step-password').style.display = 'block';
-  document.getElementById('selected-info').innerHTML = `
-    <span class="c-num">server${c.id}</span>
-    <span class="c-name">${c.nickname || 'server' + c.id}</span>
-  `;
-  document.getElementById('password').value = '';
-  document.getElementById('info').textContent = '';
-  document.getElementById('error').textContent = '';
-  updateLoginAvailability();
-  document.getElementById('password').focus();
-}
-
-function goBack() {
-  selected = null;
-  document.getElementById('step-select').style.display = 'block';
-  document.getElementById('step-password').style.display = 'none';
-}
-
-function syncSelectedState() {
-  if (!selected) return;
-  const latest = containers.find(c => c.id === selected.id);
-  if (!latest) return;
-  selected = latest;
-  updateLoginAvailability();
-}
-
-function updateLoginAvailability() {
-  const loginBtn = document.getElementById('login-btn');
-  const info = document.getElementById('info');
-  if (!selected) {
-    loginBtn.disabled = true;
-    info.textContent = '';
-    return;
-  }
-  if (selected.isResetting) {
-    loginBtn.disabled = true;
-    info.textContent = '초기화 중... 완료 후 접속할 수 있습니다.';
-  } else {
-    loginBtn.disabled = false;
-    info.textContent = '';
-  }
-}
-
-document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
-
-async function login() {
-  const password = document.getElementById('password').value;
-  const err = document.getElementById('error');
-  if (!selected || selected.isResetting) {
-    document.getElementById('info').textContent = '초기화 중... 완료 후 접속할 수 있습니다.';
-    return;
-  }
-  if (!password) { err.textContent = '비밀번호를 입력하세요'; return; }
-  err.textContent = '';
-  try {
-    const res = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: selected.id, password }) });
-    const data = await res.json();
-    if (!res.ok) { err.textContent = data.error; return; }
-    sessionStorage.setItem('token', data.token);
-    sessionStorage.setItem('containerId', data.id);
-    sessionStorage.setItem('containerName', selected.nickname || 'server' + data.id);
-    location.href = '/terminal.html';
-  } catch (e) { err.textContent = '서버 오류가 발생했습니다'; }
 }
 
 loadContainers();

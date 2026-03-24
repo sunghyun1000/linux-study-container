@@ -18,18 +18,12 @@
   .btn-danger { background: #ef4444; color: white; }
   .btn-danger:hover { background: #dc2626; }
 
-  /* 로그인 */
-  #login-page { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-  .login-card { background: #1e293b; border-radius: 12px; padding: 2rem; width: 360px; }
-  .login-card h2 { margin-bottom: 1.5rem; color: #38bdf8; }
-  .back-to-student { display: block; text-align: center; margin-top: 1.25rem; color: #475569; font-size: 0.85rem; text-decoration: none; }
-  .back-to-student:hover { color: #94a3b8; }
   input { width: 100%; background: #0f172a; border: 2px solid #334155; border-radius: 8px; padding: 0.7rem 1rem; color: #e2e8f0; font-size: 1rem; outline: none; margin-bottom: 1rem; }
   input:focus { border-color: #38bdf8; }
   .error { color: #f87171; font-size: 0.85rem; margin-top: 0.5rem; }
 
   /* 대시보드 */
-  #dashboard-page { display: none; }
+  #dashboard-page { display: block; }
   .action-bar { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; }
   .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
   .summary-card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 0.9rem 1rem; }
@@ -80,17 +74,6 @@
 </style>
 </head>
 <body>
-
-<!-- 로그인 -->
-<div id="login-page">
-  <div class="login-card">
-    <h2>🔐 관리자 로그인</h2>
-    <input type="password" id="admin-pw" placeholder="비밀번호" />
-    <button class="btn btn-primary" style="width:100%;padding:0.7rem" onclick="adminLogin()">로그인</button>
-    <div class="error" id="login-error"></div>
-    <a href="/" class="back-to-student">← 학생 접속 페이지로 돌아가기</a>
-  </div>
-</div>
 
 <!-- 대시보드 -->
 <div id="dashboard-page">
@@ -188,19 +171,20 @@
 <div id="toast"></div>
 
 <script>
-let adminToken = null;
+let adminToken = sessionStorage.getItem('adminToken');
 let containers = [];
 let pendingResetIds = [];
 let resetPollingTimer = null;
 let resetQueueInfo = { queue: [], total: 0 };
+
+// 토큰 없으면 로그인 페이지로
+if (!adminToken) { location.replace('/admin-login.html'); }
 
 function updateDiskSummary(summary = {}) {
   document.getElementById('disk-total').textContent = summary.total || '-';
   document.getElementById('disk-available').textContent = summary.available || '-';
   document.getElementById('disk-used-percent').textContent = summary.usedPercent || '-';
 }
-
-document.getElementById('admin-pw').addEventListener('keydown', e => { if (e.key === 'Enter') adminLogin(); });
 
 // ── 토스트 ──────────────────────────────────────────────────
 function toast(msg, type = 'success', duration = 3000) {
@@ -212,20 +196,10 @@ function toast(msg, type = 'success', duration = 3000) {
   setTimeout(() => el.remove(), duration);
 }
 
-// ── 인증 ────────────────────────────────────────────────────
-async function adminLogin() {
-  const pw = document.getElementById('admin-pw').value;
-  const err = document.getElementById('login-error');
-  const res = await fetch('/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw }) });
-  const data = await res.json();
-  if (!res.ok) { err.textContent = data.error; return; }
-  adminToken = data.token;
-  document.getElementById('login-page').style.display = 'none';
-  document.getElementById('dashboard-page').style.display = 'block';
-  loadContainers();
+function adminLogout() {
+  sessionStorage.removeItem('adminToken');
+  location.href = '/admin-login.html';
 }
-
-function adminLogout() { adminToken = null; location.reload(); }
 
 // ── 컨테이너 목록 ────────────────────────────────────────────
 async function loadContainers() {
@@ -234,6 +208,7 @@ async function loadContainers() {
     fetch('/api/admin/containers', { headers }),
     fetch('/api/admin/disk-summary', { headers }),
   ]);
+  if (containersRes.status === 401) { adminLogout(); return; }
   containers = await containersRes.json();
   updateDiskSummary(await diskSummaryRes.json());
 
@@ -411,6 +386,8 @@ async function changeAdminPw() {
   closePwModal();
   toast('비밀번호가 변경되었습니다', 'success');
 }
+
+loadContainers();
 </script>
 </body>
 </html>

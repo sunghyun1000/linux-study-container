@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>로그인 - Linux 실습실</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .container { width: 100%; max-width: 480px; padding: 2rem; }
+  h1 { text-align: center; font-size: 1.8rem; margin-bottom: 2rem; color: #38bdf8; }
+  .back-btn { background: none; border: none; color: #64748b; font-size: 0.85rem; cursor: pointer; padding: 0 0 1.5rem 0; display: flex; align-items: center; gap: 0.3rem; }
+  .back-btn:hover { color: #94a3b8; }
+  .selected-info { background: #1e293b; border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem; }
+  .c-num { font-size: 0.8rem; font-family: monospace; color: #475569; }
+  .c-name { font-weight: 600; font-size: 1.05rem; color: #e2e8f0; }
+  input[type=password] { width: 100%; background: #0f172a; border: 2px solid #334155; border-radius: 8px; padding: 0.75rem 1rem; color: #e2e8f0; font-size: 1rem; outline: none; margin-bottom: 1rem; }
+  input[type=password]:focus { border-color: #38bdf8; }
+  .btn-primary { width: 100%; background: #0ea5e9; border: none; border-radius: 8px; padding: 0.85rem; color: white; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+  .btn-primary:hover { background: #0284c7; }
+  .error { color: #f87171; font-size: 0.875rem; margin-top: 0.5rem; text-align: center; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🐧 Linux 실습실</h1>
+  <button class="back-btn" onclick="history.back()">← 다시 선택</button>
+  <div class="selected-info" id="selected-info"></div>
+  <input type="password" id="password" placeholder="비밀번호 입력" autofocus />
+  <button class="btn-primary" onclick="login()">접속</button>
+  <div class="error" id="error"></div>
+</div>
+<script>
+const selectedId = sessionStorage.getItem('selectedId');
+const selectedName = sessionStorage.getItem('selectedName');
+
+if (!selectedId) { location.replace('/'); }
+
+document.getElementById('selected-info').innerHTML = `
+  <span class="c-num">server${selectedId}</span>
+  <span class="c-name">${selectedName || 'server' + selectedId}</span>
+`;
+
+document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+async function login() {
+  const password = document.getElementById('password').value;
+  const err = document.getElementById('error');
+  if (!password) { err.textContent = '비밀번호를 입력하세요'; return; }
+  err.textContent = '';
+  try {
+    const res = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: selectedId, password })
+    });
+    const data = await res.json();
+    if (!res.ok) { err.textContent = data.error; return; }
+    sessionStorage.setItem('token', data.token);
+    sessionStorage.setItem('containerId', data.id);
+    sessionStorage.setItem('containerName', selectedName || 'server' + data.id);
+    location.href = '/terminal.html';
+  } catch (e) { err.textContent = '서버 오류가 발생했습니다'; }
+}
+</script>
+</body>
+</html>

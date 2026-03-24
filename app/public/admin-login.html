@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>관리자 로그인 - Linux 실습실</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .login-card { background: #1e293b; border-radius: 12px; padding: 2rem; width: 360px; }
+  .login-card h2 { margin-bottom: 1.5rem; color: #38bdf8; }
+  input { width: 100%; background: #0f172a; border: 2px solid #334155; border-radius: 8px; padding: 0.7rem 1rem; color: #e2e8f0; font-size: 1rem; outline: none; margin-bottom: 1rem; }
+  input:focus { border-color: #38bdf8; }
+  .btn { border-radius: 6px; padding: 0.4rem 1rem; font-size: 0.85rem; cursor: pointer; border: none; font-weight: 500; }
+  .btn-primary { background: #0ea5e9; color: white; width: 100%; padding: 0.7rem; }
+  .btn-primary:hover { background: #0284c7; }
+  .error { color: #f87171; font-size: 0.85rem; margin-top: 0.5rem; }
+  .back-link { display: block; text-align: center; margin-top: 1.25rem; color: #475569; font-size: 0.85rem; text-decoration: none; }
+  .back-link:hover { color: #94a3b8; }
+</style>
+</head>
+<body>
+<div class="login-card">
+  <h2>🔐 관리자 로그인</h2>
+  <input type="password" id="admin-pw" placeholder="비밀번호" autofocus />
+  <button class="btn btn-primary" onclick="adminLogin()">로그인</button>
+  <div class="error" id="login-error"></div>
+  <a href="/" class="back-link">← 학생 접속 페이지로 돌아가기</a>
+</div>
+<script>
+document.getElementById('admin-pw').addEventListener('keydown', e => { if (e.key === 'Enter') adminLogin(); });
+
+async function adminLogin() {
+  const pw = document.getElementById('admin-pw').value;
+  const err = document.getElementById('login-error');
+  const res = await fetch('/api/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pw })
+  });
+  const data = await res.json();
+  if (!res.ok) { err.textContent = data.error; return; }
+  sessionStorage.setItem('adminToken', data.token);
+  location.href = '/admin.html';
+}
+</script>
+</body>
+</html>
