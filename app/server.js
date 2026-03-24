@@ -203,12 +203,15 @@ app.get('/api/admin/containers', requireAdmin, (req, res) => {
       usageMap[id] = '-';
       if (normalizedState !== 'running') return;
       try {
-        const usageOut = execSync(`lxc exec server${id} -- df -B1 --output=used / | tail -n 1`, {
+        const stateJson = execSync(`lxc query /1.0/instances/server${id}/state`, {
           encoding: 'utf8',
           timeout: 5000,
-        }).trim();
-        const usageBytes = Number.parseInt(usageOut, 10);
-        usageMap[id] = formatBytes(usageBytes);
+        });
+        const state = JSON.parse(stateJson);
+        const usageBytes = state?.disk?.root?.usage;
+        if (Number.isFinite(usageBytes)) {
+          usageMap[id] = formatBytes(usageBytes);
+        }
       } catch (_) {}
     });
   } catch (_) {}
