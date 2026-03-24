@@ -290,7 +290,7 @@ install_platform_tools() {
     pkg_install build-essential curl gawk jq make nftables network-manager python3 snapd
   else
     enable_extra_repos
-    pkg_install @development-tools curl gcc-c++ gawk jq make nftables NetworkManager python3 snapd
+    pkg_install curl gcc gcc-c++ gawk jq make nftables NetworkManager python3 snapd
   fi
 }
 
