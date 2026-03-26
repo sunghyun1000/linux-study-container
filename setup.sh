@@ -398,6 +398,13 @@ NFTEOF
 
   echo 'br_netfilter' | sudo tee /etc/modules-load.d/br_netfilter.conf >/dev/null
   sudo modprobe br_netfilter
+
+  # firewalld가 활성 상태면 lxdbr0을 trusted 존에 추가
+  # (미설정 시 firewalld가 호스트↔컨테이너 트래픽을 차단함)
+  if command -v firewall-cmd >/dev/null 2>&1 && sudo firewall-cmd --state >/dev/null 2>&1; then
+    sudo firewall-cmd --zone=trusted --add-interface=lxdbr0 --permanent
+    sudo firewall-cmd --reload
+  fi
 }
 
 configure_services() {

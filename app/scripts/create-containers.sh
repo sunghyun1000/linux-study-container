@@ -90,9 +90,9 @@ setup_container() {
   # 10-lxd.yaml (LXD 자동 생성)도 dhcp4:false로 덮어써서 DHCP 완전 차단
   "$LXC_BIN" exec "server$i" -- bash -c \
     "printf 'network:\n  version: 2\n  ethernets:\n    eth0:\n      dhcp4: false\n' \
-     > /etc/netplan/10-lxd.yaml" < /dev/null
+     > /etc/netplan/10-lxd.yaml && chmod 600 /etc/netplan/10-lxd.yaml" < /dev/null
 
-  # 정적 IP netplan 설정 (재부팅 후 유지용)
+  # 정적 IP netplan 설정
   "$LXC_BIN" exec "server$i" -- bash -c "cat > /etc/netplan/50-cloud-init.yaml << 'NETPLAN'
 network:
   version: 2
@@ -108,13 +108,8 @@ network:
         addresses: [${LXD_BRIDGE_IP}, 8.8.8.8]
 NETPLAN" < /dev/null
 
-  # ip 명령으로 즉시 적용
-  "$LXC_BIN" exec "server$i" -- bash -c \
-    "ip addr flush dev eth0 2>/dev/null; \
-     ip addr add ${IP}/24 dev eth0; \
-     ip route add default via ${LXD_BRIDGE_IP} 2>/dev/null || true; \
-     printf 'nameserver ${LXD_BRIDGE_IP}\nnameserver 8.8.8.8\n' > /etc/resolv.conf" \
-    < /dev/null
+  # netplan apply로 네트워크 및 DNS 설정 즉시 적용
+  "$LXC_BIN" exec "server$i" -- netplan apply < /dev/null
 
   # needrestart 무음 처리
   "$LXC_BIN" exec "server$i" -- bash -c \
